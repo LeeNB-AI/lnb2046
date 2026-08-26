@@ -1,0 +1,548 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>小红书在线工作台</title>
+    <link rel="stylesheet" href="./styles.css" />
+  </head>
+  <body>
+    <div class="three-column-shell">
+      <aside class="left-nav">
+        <div class="brand">
+          <div class="brand-mark">红</div>
+          <div>
+            <h1>在线工作台</h1>
+            <p>云端内容生产</p>
+          </div>
+        </div>
+
+        <nav class="nav">
+          <button class="nav-item active" data-scroll-target="productSection"><span>1</span>生成输入</button>
+          <button class="nav-item" data-scroll-target="hotspotSection"><span>2</span>选题库</button>
+          <button class="nav-item" data-scroll-target="knowledgeSection"><span>3</span>知识库</button>
+          <button class="nav-item" data-scroll-target="topicSection"><span>4</span>生成选题</button>
+          <button class="nav-item" data-scroll-target="copySection"><span>5</span>生成文案</button>
+          <button class="nav-item" data-scroll-target="coverSection"><span>6</span>生成封面</button>
+          <button class="nav-item" data-scroll-target="previewSection"><span>7</span>预览草稿</button>
+        </nav>
+
+        <div class="system-card">
+          <div class="system-line"><span id="xhsDot" class="dot"></span><strong>选题库</strong></div>
+          <p id="xhsStatus">检查中</p>
+          <div class="system-line"><span id="textDot" class="dot"></span><strong>文案模型</strong></div>
+          <p id="textStatus">检查中</p>
+          <div class="system-line"><span id="imageDot" class="dot"></span><strong>封面生成</strong></div>
+          <p id="imageStatus">检查中</p>
+          <div class="system-actions">
+            <button id="exportBackupBtn" class="secondary-btn" type="button">导出备份</button>
+            <button id="importBackupBtn" class="secondary-btn" type="button">导入备份</button>
+            <input id="backupFileInput" type="file" accept="application/json,.json" hidden />
+          </div>
+          <p id="apiKeyStatus">未检查</p>
+        </div>
+      </aside>
+
+      <main class="generation-column">
+        <header class="topbar">
+          <div>
+            <p class="date">Online MVP</p>
+            <h2>一键生成小红书草稿</h2>
+          </div>
+          <div class="top-actions">
+            <button id="fetchHotspotsBtn" class="secondary-btn">读取素材库</button>
+            <button id="generateBtn" class="primary-btn">自动全部生成</button>
+          </div>
+        </header>
+
+        <div class="stats-row" aria-label="工作台统计">
+          <div class="stat-card">
+            <span>草稿箱</span>
+            <strong id="draftCount">0</strong>
+          </div>
+          <div class="stat-card">
+            <span>已发布</span>
+            <strong id="publishedCount">0</strong>
+          </div>
+          <div class="stat-card">
+            <span>知识库</span>
+            <strong id="knowledgeCount">0</strong>
+          </div>
+          <div class="stat-card wide">
+            <span>最近生成</span>
+            <strong id="latestGeneratedAt">暂无</strong>
+          </div>
+        </div>
+
+        <section class="panel section-panel" id="productSection">
+          <div class="panel-heading">
+            <div class="step-heading-text">
+              <span class="step-badge">1</span>
+              <div>
+                <h3>生成输入</h3>
+                <p>先整理商品信息、卖点、目标人群和禁用表达。</p>
+              </div>
+            </div>
+            <button id="saveInputBtn" class="secondary-btn step-action">保存输入</button>
+          </div>
+          <div class="form-grid">
+            <label>
+              产品名称
+              <input id="productName" value="私密护理凝胶" />
+            </label>
+            <label>
+              产品类目
+              <input id="productCategory" value="成人用品 / 两性健康" />
+            </label>
+            <label>
+              选题关键词
+              <input id="hotKeywords" value="约会前准备, 亲密关系, 女生护理" />
+            </label>
+            <label>
+              禁用/避开的表达
+              <input id="blockedTerms" value="治疗、根治、增强、未成年人、露骨动作、低俗暗示、夸大效果" />
+            </label>
+          </div>
+          <div class="form-grid wide">
+            <label>
+              核心卖点
+              <textarea id="sellingPoints">温和配方，便携小支装，适合亲密关系前后的清洁护理；不主打医疗功效，强调舒适、安心、场景化。</textarea>
+            </label>
+            <label>
+              目标人群
+              <textarea id="targetAudience">25-38 岁女性，重视亲密关系质量，想要更体面自然地处理私密护理问题。</textarea>
+            </label>
+          </div>
+        </section>
+
+        <section class="panel section-panel" id="hotspotSection">
+          <div class="panel-heading">
+            <div class="step-heading-text">
+              <span class="step-badge">2</span>
+              <div>
+                <h3>选题素材库</h3>
+                <p id="hotspotTime">等待读取</p>
+              </div>
+            </div>
+            <div class="step-actions-inline">
+              <button id="resetTopicLibraryBtn" class="secondary-btn step-action">重置素材</button>
+              <button id="fetchHotspotsInlineBtn" class="secondary-btn step-action">读取素材库</button>
+            </div>
+          </div>
+          <p class="step-note">线上版不直接运行小红书 CLI；可粘贴本地 CLI 导出的 JSON/TXT，也可以用商品关键词生成一份基础素材。</p>
+          <div class="hotspot-import-box">
+            <label>
+              选题素材导入
+              <textarea id="hotspotImportText" placeholder="粘贴标题句式、标签、评论表达、行业词，或以前导出的 JSON/TXT 素材"></textarea>
+            </label>
+            <button id="importHotspotsBtn" class="secondary-btn">导入素材</button>
+          </div>
+          <div id="hotspotList" class="hotspot-list empty">
+            点击“读取素材库”后展示关键词、标题句式、正文结构、标签和评论表达。
+          </div>
+        </section>
+
+        <section class="panel section-panel" id="knowledgeSection">
+          <div class="panel-heading">
+            <div class="step-heading-text">
+              <span class="step-badge">3</span>
+              <div>
+                <h3>本地知识库的内容</h3>
+                <p>维护商品档案、词库和模板，生成时可选择启用范围。</p>
+              </div>
+            </div>
+            <span class="section-status">本地保存</span>
+          </div>
+          <div class="knowledge-toolbar">
+            <div>
+              <strong>本页操作</strong>
+              <p>修改词库和模板后点“保存本页修改”；商品档案需要单独从当前输入保存。</p>
+            </div>
+            <div class="top-actions">
+              <button id="saveProductProfileBtn" class="secondary-btn">保存当前商品为档案</button>
+              <button id="saveKnowledgeBtn" class="primary-btn">保存本页修改</button>
+            </div>
+          </div>
+          <div class="knowledge-import-box">
+            <div class="sub-heading compact">
+              <div>
+                <h4>资料 / 规则导入</h4>
+                <span>统一导入飞书分析、词库、模板、写法要求和零散资料，写入知识库规则档案</span>
+              </div>
+            </div>
+            <label>
+              大文本内容
+              <textarea id="knowledgePasteText" placeholder="粘贴飞书分析全文、规则、词库或资料。比如：标题规则、正文结构、封面要求、禁用词、场景词、评论口吻等。"></textarea>
+            </label>
+            <div class="import-actions">
+              <button id="previewKnowledgeImportBtn" class="secondary-btn" type="button">预览导入结果</button>
+              <button id="applyKnowledgeImportBtn" class="primary-btn" type="button" disabled>确认写入知识库</button>
+              <span id="knowledgeImportStatus">未导入</span>
+            </div>
+            <div id="knowledgeImportPreview" class="import-preview empty">粘贴内容后先预览归类结果。</div>
+          </div>
+          <div class="profile-block">
+            <div class="sub-heading">
+              <h4>规则档案</h4>
+              <span>选择当前规则后，下方词库会显示这条规则提取出的用词</span>
+            </div>
+            <div class="rule-select-row">
+              <select id="activeRuleSelect"></select>
+              <button id="deleteRuleBtn" class="secondary-btn" type="button">删除规则</button>
+            </div>
+            <div id="ruleSummaryPreview" class="import-preview empty">暂无规则档案。</div>
+          </div>
+          <div class="profile-block">
+            <div class="sub-heading">
+              <h4>商品档案</h4>
+              <span>点击同步时才覆盖上方生成输入</span>
+            </div>
+            <div id="productProfilesList" class="profile-list empty">暂无商品档案。</div>
+          </div>
+          <div class="knowledge-grid">
+            <div class="knowledge-subpanel">
+              <div class="sub-heading compact">
+                <h4>词库</h4>
+                <span>人群、痛点、场景、卖点</span>
+              </div>
+              <div id="termManager" class="manager"></div>
+            </div>
+            <div class="knowledge-subpanel">
+              <div class="sub-heading compact">
+                <h4>模板</h4>
+                <span>标题、正文、评论、封面</span>
+              </div>
+              <div id="templateManager" class="manager"></div>
+            </div>
+          </div>
+        </section>
+
+        <section class="panel section-panel" id="topicSection">
+          <div class="panel-heading">
+            <div class="step-heading-text">
+              <span class="step-badge">4</span>
+              <div>
+                <h3>生成的选题</h3>
+                <p id="qualityScore">未生成</p>
+              </div>
+            </div>
+            <button id="generateTopicsBtn" class="primary-btn step-action">生成选题</button>
+          </div>
+          <div id="notesList" class="notes-list empty">
+            点击“一键生成”后会出现 5 个差异化选题。
+          </div>
+          <div class="embedded-window">
+            <div class="sub-heading">
+              <h4>生成历史记录</h4>
+              <button id="openDraftBoxBtn" class="secondary-btn mini-btn">打开草稿箱</button>
+            </div>
+            <div id="draftBoxPanel" class="draft-box-panel hidden">
+              <div class="sub-heading compact">
+                <h4>草稿箱</h4>
+                <span id="draftBoxSummary">暂无草稿</span>
+              </div>
+              <div id="draftBoxList" class="history-list empty">暂无草稿。</div>
+            </div>
+            <div id="historyList" class="history-list empty">
+              生成后会保存批次记录，并保留每篇笔记的发布状态。
+            </div>
+          </div>
+        </section>
+
+        <section class="panel section-panel" id="copySection">
+          <div class="panel-heading">
+            <div class="step-heading-text">
+              <span class="step-badge">5</span>
+              <div>
+                <h3>生成的文案</h3>
+                <p id="selectedAngle">未选择</p>
+              </div>
+            </div>
+            <button id="generateCopyTopBtn" class="primary-btn step-action">生成文案</button>
+          </div>
+          <div id="editorPanel" class="editor-panel hidden">
+            <label>
+              标题
+              <input id="editTitle" />
+            </label>
+            <label>
+              正文
+              <textarea id="editBody"></textarea>
+            </label>
+            <label>
+              标签
+              <input id="editTags" />
+            </label>
+            <label>
+              铺垫评论
+              <textarea id="editComments"></textarea>
+            </label>
+            <div class="edit-actions">
+              <button id="saveEditBtn" class="secondary-btn">保存编辑</button>
+              <button id="regenerateBtn" class="secondary-btn">重生成本篇</button>
+            </div>
+          </div>
+          <div id="copyEmpty" class="empty-state">先生成选题，再在这里编辑标题、正文、标签和铺垫评论。</div>
+        </section>
+
+        <section class="panel section-panel" id="coverSection">
+          <div class="panel-heading">
+            <div class="step-heading-text">
+              <span class="step-badge">6</span>
+              <div>
+                <h3>生成的封面</h3>
+                <p id="coverStatus">等待生成</p>
+              </div>
+            </div>
+            <button id="coverTopBtn" class="primary-btn step-action">生成封面</button>
+          </div>
+          <div class="cover-workbench">
+            <div class="cover-thumb">
+              <img id="coverThumb" alt="封面缩略图" />
+              <div id="coverThumbFallback">封面生成后会显示在这里</div>
+            </div>
+            <div>
+              <div class="cover-asset-box">
+                <label>
+                  上传封面素材图
+                  <input id="coverAssetInput" type="file" accept="image/png,image/jpeg,image/webp" />
+                </label>
+                <span id="coverAssetStatus">未上传</span>
+              </div>
+              <label>
+                封面组合要求
+                <textarea id="coverBriefBox" placeholder="例如：把产品图放中下方，标题大字靠上，整体干净高级，保留小红书封面冲击力"></textarea>
+              </label>
+              <label>
+                封面模板说明
+                <textarea id="coverPromptBox" readonly></textarea>
+              </label>
+              <button id="coverBtn" class="primary-btn full-btn">生成封面</button>
+            </div>
+          </div>
+        </section>
+
+        <section class="panel section-panel" id="previewSection">
+          <div class="panel-heading">
+            <div class="step-heading-text">
+              <span class="step-badge">7</span>
+              <div>
+                <h3>预览草稿</h3>
+                <p>按电脑端草稿审核视图检查封面、标题、正文、标签和评论。</p>
+              </div>
+            </div>
+            <button id="previewRefreshBtn" class="secondary-btn step-action">刷新预览</button>
+          </div>
+          <div class="preview-wrap desktop-preview-wrap">
+            <div class="desktop-preview" aria-label="电脑端草稿预览">
+              <div class="desktop-preview-header">
+                <div class="avatar">DM</div>
+                <div>
+                  <strong id="previewAuthor">DailyMood 指风</strong>
+                  <p>草稿审核视图</p>
+                </div>
+                <span id="slideCount" class="slide-count">1/1</span>
+              </div>
+              <div class="cover-stage">
+                <img id="previewCover" alt="封面预览" />
+                <div id="coverFallback" class="cover-fallback">
+                  <span>封面预览</span>
+                  <strong id="previewCoverText">等待生成</strong>
+                </div>
+              </div>
+              <article class="preview-content">
+                <h3 id="previewTitle">生成后在这里预览标题</h3>
+                <p id="previewBody">这里会按照小红书详情页的阅读节奏展示正文，方便你判断封面、标题和正文是否像一篇真实笔记。</p>
+                <p id="previewTags" class="preview-tags">#女生护理 #亲密关系</p>
+                <h4>铺垫评论</h4>
+                <div id="previewComments" class="preview-comments"></div>
+              </article>
+              <div class="desktop-preview-metrics">
+                <div class="metric">♡ <span id="likeCount">149</span></div>
+                <div class="metric">☆ <span id="favCount">50</span></div>
+                <div class="metric">☏ <span id="commentCount">41</span></div>
+              </div>
+            </div>
+          </div>
+        </section>
+      </main>
+
+      <aside class="model-column">
+        <section class="panel model-panel">
+          <div class="panel-heading">
+            <h3>配置栏</h3>
+            <span>云端 / 本地</span>
+          </div>
+          <p class="model-help-text">模型 Key 优先使用后台环境变量；需要临时测试时可在“小高级”里填写。</p>
+
+          <div class="api-config-box model-config-card">
+            <div class="model-subheading">
+              <strong>文案生成</strong>
+              <span id="textConfigStatus">等待检查服务器配置</span>
+            </div>
+            <div class="segmented mode-switch" id="textModeControl">
+              <button class="selected" data-mode="cloud-api">云端 API</button>
+              <button data-mode="local-cli">本地 CLI</button>
+            </div>
+            <label data-text-field="local">
+              本地 CLI 命令
+              <input id="textLocalEngine" placeholder="例如：codex 或本地文案 CLI" />
+            </label>
+            <label data-text-field="cloud local">
+              文案引擎
+              <input id="textModel" value="gpt-5" />
+            </label>
+            <label data-text-field="cloud">
+              文案 API 地址
+              <input id="textApiBaseUrl" value="https://api.openai.com/v1" />
+            </label>
+            <label data-text-field="cloud">
+              可用模型
+              <select id="textModelSelect"></select>
+            </label>
+            <details class="mini-advanced" data-text-field="cloud">
+              <summary>小高级：临时 API Key</summary>
+              <label>
+                文案 API Key
+                <input id="textApiKey" type="password" placeholder="可选，仅用于本机/测试覆盖" autocomplete="off" />
+              </label>
+            </details>
+            <div class="api-config-actions">
+              <button id="fetchTextModelsBtn" class="secondary-btn" type="button">拉取模型</button>
+              <button id="saveTextConfigBtn" class="secondary-btn" type="button">保存文案设置</button>
+            </div>
+          </div>
+
+          <div class="api-config-box model-config-card">
+            <div class="model-subheading">
+              <strong>封面生成</strong>
+              <span id="coverConfigStatus">等待检查服务器配置</span>
+            </div>
+            <div class="segmented mode-switch" id="coverModeControl">
+              <button class="selected" data-mode="cloud-api">云端 API</button>
+              <button data-mode="local-cli">本地 CLI</button>
+            </div>
+            <label data-cover-field="cloud">
+              封面引擎
+              <input id="imageModel" value="gpt-image-1" />
+            </label>
+            <label data-cover-field="cloud">
+              封面 API 地址
+              <input id="coverApiBaseUrl" value="https://api.openai.com/v1" />
+            </label>
+            <label data-cover-field="cloud">
+              可用模型
+              <select id="coverModelSelect"></select>
+            </label>
+            <label data-cover-field="local">
+              本地 imagegen 脚本路径
+              <input id="imageCliPath" placeholder="仅本机调试时使用" />
+            </label>
+            <label data-cover-field="local">
+              Python 命令
+              <input id="pythonPath" value="python" />
+            </label>
+            <details class="mini-advanced" data-cover-field="cloud">
+              <summary>小高级：临时 API Key</summary>
+              <label>
+                封面 API Key
+                <input id="coverApiKey" type="password" placeholder="可选，仅用于本机/测试覆盖" autocomplete="off" />
+              </label>
+            </details>
+            <div class="api-config-actions">
+              <button id="fetchCoverModelsBtn" class="secondary-btn" type="button">拉取模型</button>
+              <button id="saveCoverConfigBtn" class="secondary-btn" type="button">保存封面设置</button>
+            </div>
+          </div>
+
+          <div class="api-config-box model-config-card">
+            <div class="model-subheading">
+              <strong>小红书 CLI</strong>
+              <span id="xhsConfigStatus">本地预览可直接调用；线上版请粘贴导入。</span>
+            </div>
+            <label>
+              小红书 CLI 路径
+              <input id="xhsCliPath" placeholder="例如：/Users/libucuo/.local/bin/xhs 或 xhs" />
+            </label>
+            <label>
+              默认类目
+              <select id="xhsCategory">
+                <option value="love">love</option>
+                <option value="cosmetics">cosmetics</option>
+                <option value="fashion">fashion</option>
+                <option value="home">home</option>
+                <option value="career">career</option>
+              </select>
+            </label>
+            <div class="api-config-actions">
+              <button id="testXhsCliBtn" class="secondary-btn" type="button">测试连接</button>
+              <button id="fetchXhsCliBtn" class="secondary-btn" type="button">拉取热点</button>
+              <button id="saveXhsConfigBtn" class="secondary-btn" type="button">保存 CLI 设置</button>
+            </div>
+          </div>
+
+          <div class="api-config-box model-config-card">
+            <div class="model-subheading">
+              <strong>生成偏好</strong>
+              <span>控制知识库、口吻、素材口径和数量。</span>
+            </div>
+
+            <label>
+              后端 API 地址
+              <input id="apiBaseUrl" value="http://127.0.0.1:4173" />
+            </label>
+
+            <div class="control-block">
+              <p>知识库范围</p>
+              <div class="segmented" id="knowledgeScope">
+                <button class="selected" data-scope="all">全部</button>
+                <button data-scope="terms">词库</button>
+                <button data-scope="templates">模板</button>
+                <button data-scope="none">关闭</button>
+              </div>
+            </div>
+
+            <div class="control-block">
+              <p>口吻</p>
+              <div class="segmented" id="toneControl">
+                <button class="selected" data-tone="mixed">混合</button>
+                <button data-tone="ugc">素人</button>
+                <button data-tone="brand">品牌</button>
+              </div>
+            </div>
+
+            <div class="control-block">
+              <p>素材使用口径</p>
+              <div class="segmented" id="hotspotUsageMode">
+                <button data-mode="strict">保守</button>
+                <button class="selected" data-mode="balanced">平衡</button>
+                <button data-mode="raw">素材全开</button>
+              </div>
+            </div>
+
+            <label>
+              创意温度
+              <input id="temperature" type="range" min="0" max="1" step="0.05" value="0.65" />
+            </label>
+
+            <label>
+              一次生成数量
+              <input id="noteCount" type="number" min="1" max="5" value="5" />
+            </label>
+
+            <label class="check-row">
+              <input id="strictCompliance" type="checkbox" checked />
+              开启成人/两性健康合规保护
+            </label>
+
+            <div class="api-config-actions">
+              <button id="saveApiConfigBtn" class="secondary-btn" type="button">保存全部配置</button>
+            </div>
+          </div>
+        </section>
+      </aside>
+    </div>
+
+    <script src="./app.js"></script>
+  </body>
+</html>
