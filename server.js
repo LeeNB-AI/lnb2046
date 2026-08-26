@@ -49,6 +49,7 @@ const defaults = {
     imageModel: "gpt-image-1",
     imageCliPath: "",
     pythonPath: "",
+    productImageFolder: "",
     xhsCliPath: "",
     xhsCategory: "love",
     hotspotUsageMode: "balanced",
@@ -196,6 +197,136 @@ async function fetchModelsFromApi({ type, apiBaseUrl, apiKey }) {
   return { models };
 }
 
+async function postModelJson({ apiBaseUrl, apiKey, model, temperature = 0.2, messages }) {
+  const base = String(apiBaseUrl || "").trim().replace(/\/$/, "");
+  if (!base) throw new Error("缺少文案 API 地址");
+  if (!apiKey) throw new Error("缺少文案 API Key");
+  const response = await fetch(`${base.replace(/\/v1$/, "")}/v1/chat/completions`, {
+    method: "POST",
+    headers: { Authorization: `Bearer ${apiKey}`, "Content-Type": "application/json" },
+    body: JSON.stringify({
+      model,
+      temperature,
+      messages,
+      response_format: { type: "json_object" },
+    }),
+  });
+  const data = await response.json().catch(() => ({}));
+  if (!response.ok) throw new Error(data.error?.message || data.message || `文案 API HTTP ${response.status}`);
+  return safeJson(data.choices?.[0]?.message?.content || "");
+}
+
+async function analyzeKnowledgeWithAi({ rawText, product, modelConfig }) {
+  const secrets = readSecrets();
+  const apiKey = modelConfig?.textApiKey || secrets.textApiKey;
+  if (!apiKey) throw new Error("缺少文案 API Key，无法使用 AI 分类");
+  const parsed = await postModelJson({
+    apiBaseUrl: modelConfig?.textApiBaseUrl || "https://api.openai.com/v1",
+    apiKey,
+    model: modelConfig?.textModel || "gpt-5",
+    temperature: 0.15,
+    messages: [
+      {
+        role: "system",
+        content:
+          "你是小红书知识库整理助手。只输出 JSON，把用户资料分类到指定字段。不要编造资料，没有明确内容就留空字符串。成人/两性健康内容只保留合规、非露骨、非医疗承诺的表达。",
+      },
+      {
+        role: "user",
+        content: JSON.stringify(
+          {
+            product,
+            rawText,
+            schema: {
+              terms: {
+                人群需求词: "逗号分隔",
+                痛点词: "逗号分隔",
+                场景词: "逗号分隔",
+                卖点词: "逗号分隔",
+                禁用词: "逗号分隔",
+                补充知识: "无法归类但有价值的资料",
+              },
+              templates: {
+                标题模板: "每条一行或用｜分隔",
+                正文模板: "结构模板",
+                评论模板: "评论模板",
+                封面模板: "封面设计模板",
+              },
+              analysisRules: {
+                summary: "资料摘要",
+                keyPoints: ["关键规则"],
+                titleRules: "标题规则",
+                bodyRules: "正文规则",
+                copyRules: "评论/口吻/转化规则",
+                coverRules: "封面规则",
+                styleKeywords: ["风格词"],
+                forbiddenPatterns: ["禁用表达"],
+              },
+              ruleName: "不超过 28 字",
+            },
+          },
+          null,
+          2,
+        ),
+      },
+    ],
+  });
+  if (!parsed || typeof parsed !== "object") throw new Error("AI 未返回可解析 JSON");
+  const draft = {
+    terms: parsed.terms || {},
+    templates: parsed.templates || {},
+    analysisRules: parsed.analysisRules || {},
+    usedAi: true,
+  };
+  draft.ruleProfile = buildRuleProfileFromPaste(rawText, draft, parsed.ruleName);
+  return draft;
+}
+
+function buildRuleProfileFromPaste(rawText, draft, preferredName = "") {
+  const lines = String(rawText || "")
+    .split(/\n+/)
+    .map((line) => line.replace(/\s+/g, " ").trim())
+    .filter((line) => line.length >= 4);
+  const fallbackPoints = lines.filter((line) => line.length <= 120).slice(0, 8);
+  const analysisRules = draft.analysisRules || {};
+  const keyPoints = Array.isArray(analysisRules.keyPoints) && analysisRules.keyPoints.length ? analysisRules.keyPoints : fallbackPoints;
+  const keywords = splitWords(
+    [
+      draft.terms?.人群需求词,
+      draft.terms?.痛点词,
+      draft.terms?.场景词,
+      draft.terms?.卖点词,
+      Array.isArray(analysisRules.styleKeywords) ? analysisRules.styleKeywords.join("、") : "",
+    ]
+      .filter(Boolean)
+      .join("\n"),
+  ).slice(0, 24);
+  return {
+    id: `rule-${Date.now()}-${Math.random().toString(16).slice(2, 8)}`,
+    name: String(preferredName || keyPoints[0] || "AI 导入规则").slice(0, 28),
+    rawText,
+    terms: {
+      ...(draft.terms || {}),
+      规则用词: keywords.join("、"),
+      分析要点: keyPoints.join("\n"),
+    },
+    templates: draft.templates || {},
+    analysisRules: {
+      summary: analysisRules.summary || keyPoints.join("\n"),
+      keyPoints,
+      titleRules: analysisRules.titleRules || "",
+      bodyRules: analysisRules.bodyRules || "",
+      copyRules: analysisRules.copyRules || "",
+      coverRules: analysisRules.coverRules || "",
+      styleKeywords: Array.isArray(analysisRules.styleKeywords) ? analysisRules.styleKeywords : keywords,
+      forbiddenPatterns: Array.isArray(analysisRules.forbiddenPatterns) ? analysisRules.forbiddenPatterns : splitWords(draft.terms?.禁用词 || ""),
+      source: "ai-knowledge-import",
+      importedAt: new Date().toISOString(),
+    },
+    createdAt: new Date().toISOString(),
+  };
+}
+
 function normalizeState(state) {
   const next = { ...state };
   next.terms = { ...defaults.terms, ...(next.terms || {}) };
@@ -219,6 +350,7 @@ function normalizeState(state) {
     imageModel: next.modelConfig?.imageModel || "gpt-image-1",
     imageCliPath: "",
     pythonPath: "",
+    productImageFolder: next.modelConfig?.productImageFolder || "",
     xhsCliPath: "",
   };
   next.productProfiles = Array.isArray(next.productProfiles) ? next.productProfiles : [];
@@ -476,6 +608,40 @@ async function resetTopicLibrary(product) {
   state.hotspots = result;
   writeState(state);
   return result;
+}
+
+function listImagesInFolder(folderPath) {
+  const resolved = path.resolve(String(folderPath || "").trim());
+  if (!resolved || !fs.existsSync(resolved)) throw new Error("产品图文件夹不存在");
+  if (!fs.statSync(resolved).isDirectory()) throw new Error("产品图路径不是文件夹");
+  const allowed = new Set([".png", ".jpg", ".jpeg", ".webp"]);
+  return fs
+    .readdirSync(resolved, { withFileTypes: true })
+    .filter((entry) => entry.isFile() && allowed.has(path.extname(entry.name).toLowerCase()))
+    .slice(0, 80)
+    .map((entry, index) => ({
+      id: `folder-asset-${index}-${Date.now()}`,
+      name: entry.name,
+      path: path.join(resolved, entry.name),
+      folderPath: resolved,
+      source: "product-image-folder",
+    }));
+}
+
+function chooseProductImage({ note, product, assets }) {
+  if (!assets?.length) return null;
+  const words = splitWords(
+    [product?.name, product?.category, product?.hotKeywords, note?.angle, note?.title, note?.tags, note?.coverBrief]
+      .filter(Boolean)
+      .join("、"),
+  ).map((item) => item.toLowerCase());
+  const scored = assets.map((asset, index) => {
+    const name = asset.name.toLowerCase();
+    const score = words.reduce((sum, word) => sum + (word && name.includes(word) ? 3 : 0), 0) + (assets.length - index) / 100;
+    return { asset, score };
+  });
+  scored.sort((a, b) => b.score - a.score);
+  return scored[0].asset;
 }
 
 function shortError(error) {
@@ -807,12 +973,14 @@ function buildCoverPrompt(product, title, angle, knowledge = null) {
   const rules = knowledge || activeKnowledge(readState(), "all");
   const coverRules = rules.analysisRules?.coverRules ? `\n知识库封面规则：${rules.analysisRules.coverRules}` : "";
   return [
-    "在线封面草稿",
+    "小红书封面生成任务",
     `产品：${product.name}`,
     `角度：${angle}`,
     `封面大字：${title}`,
-    "版式：竖版 2:3，大标题、品牌名、柔和生活方式配色",
-    "约束：无露骨画面、无医疗功效承诺、无平台 UI 仿冒",
+    "封面设计规则：大标题 3-5 个核心词、产品主体清晰、强对比、清晰焦点、画面不拥挤",
+    "版式：竖版 2:3，标题放上方或中上区域，产品图在中下方，适合小红书信息流点击",
+    "视觉：真实产品摄影感，干净高级，明亮柔和，避免廉价硬广",
+    "约束：无露骨画面、无医疗功效承诺、无平台 UI 仿冒、无水印、不要虚构夸张效果",
   ].join("\n") + coverRules;
 }
 
@@ -839,7 +1007,15 @@ async function generateCover(payload) {
   if (!note) throw new Error("没有找到要生成封面的笔记");
   const index = Math.max(0, state.notes.findIndex((item) => item.id === note.id));
   const outFile = path.join(COVER_DIR, `note-${Date.now()}-${index + 1}.svg`);
-  const coverAssetPath = payload.coverAssetPath || note.coverAssetPath || state.coverAssets?.[0]?.path || "";
+  let coverAssets = state.coverAssets || [];
+  const productImageFolder = payload.productImageFolder || state.modelConfig?.productImageFolder || "";
+  if (productImageFolder) {
+    coverAssets = listImagesInFolder(productImageFolder);
+    state.coverAssets = coverAssets;
+    state.modelConfig = { ...state.modelConfig, productImageFolder };
+  }
+  const pickedAsset = chooseProductImage({ note, product: state.product, assets: coverAssets });
+  const coverAssetPath = payload.coverAssetPath || note.coverAssetPath || pickedAsset?.path || state.coverAssets?.[0]?.path || "";
   const coverBrief = payload.coverBrief || note.coverBrief || "";
   const nextCoverFields = { coverAssetPath, coverBrief };
   fs.writeFileSync(outFile, buildCoverSvg({ ...note, ...nextCoverFields }, state.product, index), "utf8");
@@ -859,7 +1035,7 @@ async function generateCover(payload) {
       : batch,
   );
   writeState(state);
-  return { coverImage: publicPath };
+  return { coverImage: publicPath, coverAssetPath, pickedAsset: pickedAsset || null };
 }
 
 function buildCoverSvg(note, product, index) {
@@ -901,8 +1077,13 @@ function buildCoverSvg(note, product, index) {
 }
 
 function imageDataUriFromPublicPath(publicPath) {
-  if (!publicPath || !publicPath.startsWith("/output/assets/")) return "";
-  const assetPath = path.join(ASSET_DIR, path.basename(publicPath));
+  if (!publicPath) return "";
+  const assetPath = path.isAbsolute(publicPath)
+    ? publicPath
+    : publicPath.startsWith("/output/assets/")
+      ? path.join(ASSET_DIR, path.basename(publicPath))
+      : "";
+  if (!assetPath) return "";
   if (!fs.existsSync(assetPath)) return "";
   const ext = path.extname(assetPath).toLowerCase();
   const mime = ext === ".png" ? "image/png" : ext === ".webp" ? "image/webp" : "image/jpeg";
@@ -1129,6 +1310,25 @@ function createAppServer() {
       const rules = mergeAnalysisIntoState(state, rawText, body.source || "pasted-analysis");
       writeState(state);
       return send(res, 200, { analysisRules: rules, state: { ...state, stats: buildStats(state) } });
+    }
+    if (req.method === "POST" && url.pathname === "/api/knowledge/analyze") {
+      const body = await readBody(req);
+      const rawText = String(body.rawText || "").trim();
+      if (!rawText) return send(res, 400, { error: "请先粘贴资料或规则" });
+      return send(res, 200, await analyzeKnowledgeWithAi(body));
+    }
+    if (req.method === "POST" && url.pathname === "/api/assets/scan-folder") {
+      const body = await readBody(req);
+      const folderPath = String(body.folderPath || "").trim();
+      if (!folderPath) return send(res, 400, { error: "请先填写产品图文件夹路径" });
+      const state = readState();
+      const coverAssets = listImagesInFolder(folderPath);
+      const asset = chooseProductImage({ note: state.notes?.[0] || {}, product: state.product, assets: coverAssets });
+      state.coverAssets = coverAssets;
+      state.coverAssetPath = asset?.path || "";
+      state.modelConfig = { ...state.modelConfig, productImageFolder: path.resolve(folderPath) };
+      writeState(state);
+      return send(res, 200, { asset, coverAssets, productImageFolder: state.modelConfig.productImageFolder });
     }
     if (req.method === "POST" && url.pathname === "/api/assets/upload") {
       const body = await readBody(req);

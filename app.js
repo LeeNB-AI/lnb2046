@@ -20,6 +20,7 @@ const state = {
   activeRuleId: "",
   coverAssets: [],
   coverAssetPath: "",
+  productImageFolder: "",
 };
 
 const $ = (selector) => document.querySelector(selector);
@@ -128,6 +129,7 @@ function getModelConfig() {
     imageModel: $("#imageModel").value.trim() || "gpt-image-1",
     imageCliPath: $("#imageCliPath").value.trim(),
     pythonPath: $("#pythonPath").value.trim(),
+    productImageFolder: $("#productImageFolder")?.value.trim() || "",
     xhsCliPath: $("#xhsCliPath").value.trim(),
     xhsCategory: $("#xhsCategory").value,
     temperature: Number($("#temperature").value),
@@ -151,6 +153,8 @@ function setModelConfig(config = {}) {
   $("#imageModel").value = isLegacyCover ? "gpt-image-1" : config.imageModel || "gpt-image-1";
   $("#imageCliPath").value = config.imageCliPath || CODEX_IMAGEGEN_PATH;
   $("#pythonPath").value = config.pythonPath || (navigator.platform.toLowerCase().includes("win") ? "python" : CODEX_IMAGEGEN_PYTHON);
+  if ($("#productImageFolder")) $("#productImageFolder").value = config.productImageFolder || "";
+  state.productImageFolder = config.productImageFolder || "";
   $("#xhsCliPath").value = config.xhsCliPath || "/Users/libucuo/.local/bin/xhs";
   $("#xhsCategory").value = config.xhsCategory || "love";
   $("#temperature").value = config.temperature ?? 0.65;
@@ -793,29 +797,30 @@ function renderRuleProfiles() {
     .join("");
 }
 
-async function uploadCoverAsset(file) {
-  if (!file) return;
-  $("#coverAssetStatus").textContent = "上传中...";
-  const dataUrl = await new Promise((resolve, reject) => {
-    const reader = new FileReader();
-    reader.onload = () => resolve(reader.result);
-    reader.onerror = reject;
-    reader.readAsDataURL(file);
-  });
+async function scanProductImageFolder() {
+  const folderPath = $("#productImageFolder")?.value.trim();
+  if (!folderPath) {
+    $("#coverAssetStatus").textContent = "请先填写产品图文件夹路径";
+    return;
+  }
+  $("#coverAssetStatus").textContent = "正在扫描产品图文件夹...";
   try {
-    const result = await api("/api/assets/upload", {
+    const result = await api("/api/assets/scan-folder", {
       method: "POST",
-      body: JSON.stringify({ name: file.name, dataUrl }),
+      body: JSON.stringify({ folderPath }),
     });
     state.coverAssets = result.coverAssets || [];
     state.coverAssetPath = result.asset?.path || "";
-    $("#coverAssetStatus").textContent = `已上传：${result.asset?.name || file.name}`;
+    state.productImageFolder = folderPath;
+    $("#coverAssetStatus").textContent = result.asset
+      ? `已找到 ${state.coverAssets.length} 张产品图，当前将优先使用：${result.asset.name}`
+      : "文件夹里没有找到 png、jpg、jpeg、webp 图片";
   } catch (error) {
-    $("#coverAssetStatus").textContent = `上传失败：${error.message}`;
+    $("#coverAssetStatus").textContent = `扫描失败：${error.message}`;
   }
 }
 
-function previewKnowledgeImport() {
+async function previewKnowledgeImport() {
   const rawText = $("#knowledgePasteText").value.trim();
   if (!rawText) {
     $("#knowledgeImportStatus").textContent = "请先粘贴内容";
@@ -823,9 +828,24 @@ function previewKnowledgeImport() {
     renderKnowledgeImportPreview({ terms: {}, templates: {} });
     return;
   }
-  state.knowledgeImportDraft = parseKnowledgePaste(rawText);
+  $("#knowledgeImportStatus").textContent = "AI 正在分析资料...";
+  try {
+    state.knowledgeImportDraft = await api("/api/knowledge/analyze", {
+      method: "POST",
+      body: JSON.stringify({
+        rawText,
+        product: getProductInput(),
+        modelConfig: getModelConfig(),
+      }),
+    });
+    $("#knowledgeImportStatus").textContent = state.knowledgeImportDraft.usedAi
+      ? "AI 已完成分类预览，确认后写入"
+      : "AI 不可用，已用本地规则预览";
+  } catch (error) {
+    state.knowledgeImportDraft = parseKnowledgePaste(rawText);
+    $("#knowledgeImportStatus").textContent = `AI 分析失败，已用本地规则预览：${error.message}`;
+  }
   renderKnowledgeImportPreview(state.knowledgeImportDraft);
-  $("#knowledgeImportStatus").textContent = "已生成预览，确认后写入";
 }
 
 function mergeKnowledgeValue(current, incoming) {
@@ -977,9 +997,9 @@ function renderSelectedNote() {
   $("#coverBriefBox").value = note.coverBrief || "";
   if (note.coverAssetPath) {
     state.coverAssetPath = note.coverAssetPath;
-    $("#coverAssetStatus").textContent = "当前笔记已绑定封面素材";
+    $("#coverAssetStatus").textContent = "当前笔记已绑定产品图";
   } else if (state.coverAssetPath) {
-    $("#coverAssetStatus").textContent = "已上传封面素材，可生成时使用";
+    $("#coverAssetStatus").textContent = "已扫描产品图文件夹，可生成时使用";
   }
 
   $("#previewTitle").textContent = note.title;
@@ -1223,6 +1243,7 @@ async function generateCoversForAllNotes(button) {
           note,
           modelConfig: getModelConfig(),
           coverAssetPath: state.coverAssetPath || note.coverAssetPath || "",
+          productImageFolder: $("#productImageFolder")?.value.trim() || state.productImageFolder || "",
           coverBrief: $("#coverBriefBox")?.value.trim() || note.coverBrief || "",
         }),
       });
@@ -1230,7 +1251,7 @@ async function generateCoversForAllNotes(button) {
         ...state.notes[index],
         coverImage: result.coverImage,
         coverStatus: "done",
-        coverAssetPath: state.coverAssetPath || note.coverAssetPath || "",
+        coverAssetPath: result.coverAssetPath || state.coverAssetPath || note.coverAssetPath || "",
         coverBrief: $("#coverBriefBox")?.value.trim() || note.coverBrief || "",
       };
     } catch (error) {
@@ -1337,12 +1358,14 @@ async function generateSelectedCover(button) {
         note,
         modelConfig: getModelConfig(),
         coverAssetPath: state.coverAssetPath || note.coverAssetPath || "",
+        productImageFolder: $("#productImageFolder")?.value.trim() || state.productImageFolder || "",
         coverBrief: $("#coverBriefBox").value.trim() || note.coverBrief || "",
       }),
     });
     note.coverImage = result.coverImage;
     note.coverStatus = "done";
-    note.coverAssetPath = state.coverAssetPath || note.coverAssetPath || "";
+    note.coverAssetPath = result.coverAssetPath || state.coverAssetPath || note.coverAssetPath || "";
+    state.coverAssetPath = note.coverAssetPath;
     note.coverBrief = $("#coverBriefBox").value.trim() || note.coverBrief || "";
     renderSelectedNote();
   } catch (error) {
@@ -1475,10 +1498,7 @@ function bindEvents() {
     renderManagers();
     await saveKnowledge();
   });
-  $("#coverAssetInput").addEventListener("change", async (event) => {
-    await uploadCoverAsset(event.target.files?.[0]);
-    event.target.value = "";
-  });
+  $("#scanProductFolderBtn")?.addEventListener("click", scanProductImageFolder);
   $("#previewKnowledgeImportBtn").addEventListener("click", previewKnowledgeImport);
   $("#applyKnowledgeImportBtn").addEventListener("click", applyKnowledgeImport);
   $("#exportBackupBtn")?.addEventListener("click", exportBackup);

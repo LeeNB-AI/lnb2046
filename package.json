@@ -4,6 +4,7 @@
   "private": true,
   "scripts": {
     "dev:web": "node server.js",
+    "start:web": "node server.js",
     "check": "node --check server.js && node --check app.js && node --check api/_cloud.js"
   },
   "engines": {

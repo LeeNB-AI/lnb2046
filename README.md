@@ -11,6 +11,13 @@ npm install
 npm run dev:web
 ```
 
+也可以使用一键启动脚本：
+
+```text
+macOS：双击 start-workbench.command
+Windows：双击 start-workbench-windows.bat
+```
+
 打开：
 
 ```text
@@ -38,6 +45,30 @@ SUPABASE_STORAGE_BUCKET
 ## 热点素材
 
 线上版不在服务器运行小红书 CLI。先在本地运行 xhs CLI 获取热点，再把 JSON/TXT 粘贴到第 2 步“选题素材库”导入。
+
+## 知识库 AI 分类
+
+第 3 步支持粘贴资料或规则后用文案模型自动分类到人群需求词、痛点词、场景词、卖点词、禁用词、标题模板、正文模板、评论模板和封面模板。没有配置文案 API Key 时，会回退到本地关键词规则分类。
+
+## 产品图文件夹
+
+本地模式可以在第 6 步填写产品图文件夹路径，系统会扫描 png、jpg、jpeg、webp 图片，并根据当前文案挑选更匹配的产品图参与封面生成提示词。线上 Vercel 不能直接读取你电脑里的文件夹，后续可以改成 Supabase Storage 或网盘上传。
+
+Windows 路径示例：
+
+```text
+D:\素材\产品图
+```
+
+macOS 路径示例：
+
+```text
+/Users/你的名字/Pictures/产品图
+```
+
+## 换电脑继续编辑
+
+可以在另一台电脑上通过 GitHub 仓库继续编辑。流程是 clone 仓库、安装 Node.js、运行 `npm install` 和 `npm run dev:web`。如果要在新电脑继续真实拉热点，需要那台电脑也安装并登录 xhs CLI；如果要本地生成封面，需要重新配置 API Key 或本地 imagegen 环境。
 
 ## 安全边界
 
