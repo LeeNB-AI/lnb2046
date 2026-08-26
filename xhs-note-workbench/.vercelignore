@@ -1,0 +1,6 @@
+xhs-offline-workbench/
+data/
+output/
+.env*
+node_modules/
+*.zip
