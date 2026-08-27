@@ -35,6 +35,7 @@ const defaults = {
     coverProvider: "OpenAI",
     coverApiBaseUrl: "https://api.openai.com/v1",
     imageModel: "gpt-image-1",
+    productImageFolder: "",
     xhsCliPath: "xhs",
     xhsCategory: "love",
     hotspotUsageMode: "balanced",
@@ -398,17 +399,18 @@ function buildBody(product, hotspot, knowledge, angle, index, tone) {
   return `${angle.hook}。以前一聊到${publicCategory(product.category)}，很多人第一反应就是尴尬，尤其是${pain}的时候，更容易把需求藏起来。\n\n但放到真实生活里，它就是一个日常护理场景。比如${scene}，或者两个人相处久了之后，准备得更细一点，整个人会更放松。${product.name}适合放在这个位置：不强调医疗功效，也不讲夸张结果，只把${sell}和舒服这几个点讲清楚。\n\n我更喜欢用“${keyword}”这个角度去说它，因为它不会太硬广，也不会显得低俗。${toneLine}`;
 }
 
-function buildCoverPrompt(product, title, angle) {
+function buildCoverPrompt(product, title, angle, knowledge = null) {
+  const coverRules = knowledge?.templates?.封面模板 || defaults.templates.封面模板;
   return [
-    "Use case: ads-marketing",
-    "Asset type: Xiaohongshu vertical note cover",
-    `Primary request: a clean lifestyle cover for ${product.name}, topic angle ${angle}`,
-    "Scene/backdrop: bright vanity table or bathroom shelf, soft daylight, tasteful intimate-care lifestyle mood",
-    "Subject: discreet small tube product silhouette, no explicit body parts, no sexualized pose",
-    "Style/medium: realistic editorial product photography",
-    "Composition/framing: vertical 2:3, large readable Chinese headline area",
-    `Text (verbatim): \"${title}\"`,
-    "Constraints: elegant, platform-safe, no medical claims, no nudity, no watermark, no fake app UI",
+    "小红书封面生成任务",
+    `产品：${product.name}`,
+    `角度：${angle}`,
+    `封面大字：${title}`,
+    "封面设计规则：大标题 3-5 个核心词、产品主体清晰、强对比、清晰焦点、画面不拥挤",
+    "版式：竖版 2:3，标题放上方或中上区域，产品图在中下方，适合小红书信息流点击",
+    "视觉：真实产品摄影感，干净高级，明亮柔和，避免廉价硬广",
+    `用户封面模板：${coverRules}`,
+    "约束：无露骨画面、无医疗功效承诺、无平台 UI 仿冒、无水印、不要虚构夸张效果",
   ].join("\n");
 }
 
@@ -455,7 +457,7 @@ function buildBaseNotes({ product, hotspot, knowledge, modelConfig, tone, noteCo
       tags: copyMode === "topic" ? "" : unique([tags[index], tags[index + 1], "#女生护理", "#亲密关系", "#好物分享"], 6).join(" "),
       comments,
       coverText: title,
-      coverPrompt: buildCoverPrompt(product, title, angle.type),
+      coverPrompt: buildCoverPrompt(product, title, angle.type, knowledge),
       coverImage: "",
       coverStatus: "pending",
       publishStatus: "draft",
@@ -476,6 +478,83 @@ async function postJson(apiBaseUrl, apiKey, path, payload) {
   const data = await response.json().catch(() => ({}));
   if (!response.ok) throw new Error(data.error?.message || `模型 API HTTP ${response.status}`);
   return data;
+}
+
+async function postModelJson({ apiBaseUrl, apiKey, model, temperature = 0.2, messages }) {
+  const data = await postJson(apiBaseUrl || "https://api.openai.com/v1", apiKey, "/v1/chat/completions", {
+    model,
+    temperature,
+    messages,
+    response_format: { type: "json_object" },
+  });
+  return safeJson(data.choices?.[0]?.message?.content || "");
+}
+
+function buildRuleProfileFromPaste(rawText, draft, preferredName = "") {
+  const lines = String(rawText || "")
+    .split(/\n+/)
+    .map((line) => line.trim())
+    .filter(Boolean);
+  return {
+    id: `rule-${Date.now()}-${Math.random().toString(16).slice(2, 8)}`,
+    name: preferredName || lines[0]?.slice(0, 18) || "AI 分类规则",
+    rawText,
+    terms: draft.terms || {},
+    templates: draft.templates || {},
+    analysisRules: draft.analysisRules || {
+      keyPoints: lines.slice(0, 8),
+      styleRules: [],
+      avoidRules: [],
+      matchingRules: [],
+    },
+    createdAt: new Date().toISOString(),
+  };
+}
+
+async function analyzeKnowledgeWithAi(body = {}) {
+  const rawText = String(body.rawText || "").trim();
+  if (!rawText) throw new Error("请先粘贴资料或规则");
+  const modelConfig = { ...defaults.modelConfig, ...(body.modelConfig || {}) };
+  const apiKey = body.modelConfig?.textApiKey || envTextKey();
+  if (!apiKey) throw new Error("缺少文案 API Key，无法使用 AI 分类");
+  const parsed = await postModelJson({
+    apiBaseUrl: modelConfig.textApiBaseUrl || process.env.TEXT_API_BASE_URL || "https://api.openai.com/v1",
+    apiKey,
+    model: modelConfig.textModel || process.env.TEXT_MODEL || "gpt-5",
+    temperature: 0.15,
+    messages: [
+      {
+        role: "system",
+        content:
+          "你是小红书知识库整理助手。只输出 JSON。把用户资料归类到固定词库和模板字段，不能编造不存在的重点；成人/两性健康内容要保留合规、温和、非露骨表达。",
+      },
+      {
+        role: "user",
+        content: `商品信息：${JSON.stringify(body.product || {})}\n\n待分析资料：\n${rawText}\n\n输出 JSON：{"ruleName":"","terms":{"人群需求词":"","痛点词":"","场景词":"","卖点词":"","禁用词":"","补充知识":""},"templates":{"标题模板":"","正文模板":"","评论模板":"","封面模板":""},"analysisRules":{"keyPoints":[],"styleRules":[],"avoidRules":[],"matchingRules":[]}}`,
+      },
+    ],
+  });
+  if (!parsed) throw new Error("文案模型没有返回可解析 JSON");
+  const draft = {
+    terms: {
+      人群需求词: parsed.terms?.人群需求词 || "",
+      痛点词: parsed.terms?.痛点词 || "",
+      场景词: parsed.terms?.场景词 || "",
+      卖点词: parsed.terms?.卖点词 || "",
+      禁用词: parsed.terms?.禁用词 || "",
+      补充知识: parsed.terms?.补充知识 || "",
+    },
+    templates: {
+      标题模板: parsed.templates?.标题模板 || "",
+      正文模板: parsed.templates?.正文模板 || "",
+      评论模板: parsed.templates?.评论模板 || "",
+      封面模板: parsed.templates?.封面模板 || "",
+    },
+    analysisRules: parsed.analysisRules || {},
+    usedAi: true,
+  };
+  draft.ruleProfile = buildRuleProfileFromPaste(rawText, draft, parsed.ruleName);
+  return draft;
 }
 
 async function listModels(body = {}) {
@@ -524,7 +603,7 @@ async function generateNotesWithTextApi({ modelConfig, product, hotspot, knowled
       tags: String(item.tags || fallback.tags).trim(),
       comments,
       coverText: item.coverText || title,
-      coverPrompt: buildCoverPrompt(product, title, item.angle || fallback.angle),
+      coverPrompt: buildCoverPrompt(product, title, item.angle || fallback.angle, knowledge),
       modelSource: "cloud-text-api",
       quality: qualityCheck({ title, body, comments, blockedTerms: product.blockedTerms }),
     };
@@ -656,7 +735,7 @@ async function generateCover(body) {
   if (!apiKey) throw new Error("缺少 COVER_API_KEY 或 OPENAI_API_KEY 环境变量");
   const data = await postJson(config.coverApiBaseUrl || process.env.COVER_API_BASE_URL || "https://api.openai.com/v1", apiKey, "/v1/images/generations", {
     model: config.imageModel || process.env.COVER_MODEL || "gpt-image-1",
-    prompt: note.coverPrompt,
+    prompt: note.coverPrompt || buildCoverPrompt(state.product || defaults.product, note.coverText || note.title, note.angle, activeKnowledge(state, config.knowledgeScope || "all")),
     size: "1024x1536",
     quality: "medium",
   });
@@ -714,6 +793,10 @@ async function route(pathname, method, body) {
   }
   if (method === "GET" && pathname === "/api/knowledge") return loadCloudState();
   if (method === "POST" && pathname === "/api/knowledge") return saveKnowledge(body);
+  if (method === "POST" && pathname === "/api/knowledge/analyze") return analyzeKnowledgeWithAi(body);
+  if (method === "POST" && pathname === "/api/assets/scan-folder") {
+    throw new Error("线上版不能读取你电脑里的产品图文件夹。请在本地工作台使用文件夹路径，或后续接 Supabase/网盘上传。");
+  }
   if (method === "POST" && pathname === "/api/models/list") return listModels(body);
   if (method === "POST" && pathname === "/api/hotspots/import") return importHotspots(body);
   if (method === "POST" && pathname === "/api/xhs/hotspots") throw new Error("线上版不运行 xhs CLI。请在本地运行后，把 JSON 或文本粘贴到第 2 步导入。");

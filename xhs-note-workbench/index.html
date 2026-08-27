@@ -175,7 +175,7 @@
               <textarea id="knowledgePasteText" placeholder="粘贴飞书分析全文、规则、词库或资料。比如：标题规则、正文结构、封面要求、禁用词、场景词、评论口吻等。"></textarea>
             </label>
             <div class="import-actions">
-              <button id="previewKnowledgeImportBtn" class="secondary-btn" type="button">预览导入结果</button>
+              <button id="previewKnowledgeImportBtn" class="secondary-btn" type="button">AI 分析并预览</button>
               <button id="applyKnowledgeImportBtn" class="primary-btn" type="button" disabled>确认写入知识库</button>
               <span id="knowledgeImportStatus">未导入</span>
             </div>
@@ -304,11 +304,12 @@
             <div>
               <div class="cover-asset-box">
                 <label>
-                  上传封面素材图
-                  <input id="coverAssetInput" type="file" accept="image/png,image/jpeg,image/webp" />
+                  上传产品图文件夹
+                  <input id="productImageFolder" placeholder="例如：/Users/你的名字/Pictures/产品图 或 D:\\素材\\产品图" />
                 </label>
-                <span id="coverAssetStatus">未上传</span>
+                <button id="scanProductFolderBtn" class="secondary-btn" type="button">扫描文件夹</button>
               </div>
+              <p id="coverAssetStatus" class="field-status">未指定产品图文件夹</p>
               <label>
                 封面组合要求
                 <textarea id="coverBriefBox" placeholder="例如：把产品图放中下方，标题大字靠上，整体干净高级，保留小红书封面冲击力"></textarea>

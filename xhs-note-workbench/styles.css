@@ -469,6 +469,14 @@ select:focus {
   line-height: 1.4;
 }
 
+.field-status {
+  margin: -4px 0 12px;
+  color: var(--muted);
+  font-size: 12px;
+  font-weight: 850;
+  line-height: 1.45;
+}
+
 .hotspot-list,
 .manager,
 .notes-list {

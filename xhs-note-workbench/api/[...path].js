@@ -1,4 +1,3 @@
-export { default } from "./_cloud.js";
-export const config = {
-  runtime: "nodejs"
-};
+const { createDynamicHandler } = require("./_cloud");
+
+module.exports = createDynamicHandler();
