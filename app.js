@@ -45,7 +45,7 @@ async function api(path, options = {}) {
   const url = apiUrl(path);
   const base = getApiBaseUrl();
   if (path.startsWith("/api/") && /\/v1\/?$|api\.openai\.com|aiapi\.world/i.test(base)) {
-    throw new Error("后端 API 地址填错了：这里要填工作台地址，不是模型 API 地址。模型 API 地址请填在右侧“文案 API 地址/封面 API 地址”。");
+    throw new Error("工作台服务地址填错了：这里要填工作台网站地址，不是模型 API 地址。模型 API 地址请填在“文案 API 地址/封面 API 地址”。");
   }
   const response = await fetch(url, {
     headers: { "Content-Type": "application/json" },
@@ -62,7 +62,7 @@ async function api(path, options = {}) {
     }
   } else {
     const preview = rawText.replace(/\s+/g, " ").trim().slice(0, 90) || `HTTP ${response.status}`;
-    throw new Error(`接口没有返回 JSON，可能是后端 API 地址不对或服务返回了网页：${preview}`);
+    throw new Error(`接口没有返回 JSON，可能是工作台服务地址不对或服务返回了网页：${preview}`);
   }
   if (!response.ok || data.error) throw new Error(data.error || "请求失败");
   return data;
