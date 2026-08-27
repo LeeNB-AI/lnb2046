@@ -449,6 +449,7 @@ function buildCoverPrompt(product, title, angle, knowledge = null) {
     `产品：${product.name}`,
     `角度：${angle}`,
     `封面大字：${title}`,
+    "使用 skill：cover-design（小红书首图/封面点击率优化规则）",
     "封面设计规则：大标题 3-5 个核心词、产品主体清晰、强对比、清晰焦点、画面不拥挤",
     "版式：竖版 2:3，标题放上方或中上区域，产品图在中下方，适合小红书信息流点击",
     "视觉：真实产品摄影感，干净高级，明亮柔和，避免廉价硬广",
@@ -792,6 +793,30 @@ async function deleteHistory(body) {
   return { history, stats: buildStats({ ...state, history }) };
 }
 
+async function exportBackup() {
+  const state = await loadCloudState();
+  return {
+    exportedAt: new Date().toISOString(),
+    version: "online-workbench-1",
+    state,
+  };
+}
+
+async function importBackup(body = {}) {
+  const backup = body.state || body.backup?.state || body.backup || {};
+  if (!backup || typeof backup !== "object") throw new Error("备份内容格式不正确");
+  return saveKnowledge({
+    product: backup.product || defaults.product,
+    terms: backup.terms || defaults.terms,
+    templates: backup.templates || defaults.templates,
+    productProfiles: backup.productProfiles || [],
+    ruleProfiles: backup.ruleProfiles || [],
+    activeRuleId: backup.activeRuleId || "",
+    analysisRules: backup.analysisRules || defaults.analysisRules,
+    modelConfig: backup.modelConfig || defaults.modelConfig,
+  });
+}
+
 async function generateCover(body) {
   const state = await loadCloudState();
   const note = body.note || state.notes.find((item) => item.id === body.noteId);
@@ -874,6 +899,8 @@ async function route(pathname, method, body) {
   if (method === "POST" && pathname === "/api/notes/update") return updateNote(body);
   if (method === "POST" && pathname === "/api/history/delete") return deleteHistory(body);
   if (method === "POST" && pathname === "/api/covers/generate") return generateCover(body);
+  if (method === "GET" && pathname === "/api/backup/export") return exportBackup();
+  if (method === "POST" && pathname === "/api/backup/import") return importBackup(body);
   throw new Error(`未支持的接口：${method} ${pathname}`);
 }
 

@@ -9,24 +9,26 @@ const branch = "main";
 const targetPrefix = "xhs-note-workbench";
 const root = process.cwd();
 
-const files = [
-  ".gitignore",
-  ".vercelignore",
-  "README.md",
-  "api/[...path].js",
-  "api/_cloud.js",
-  "app.js",
-  "index.html",
-  "package-lock.json",
-  "package.json",
-  "server.js",
-  "styles.css",
-  "supabase/schema.sql",
-  "vercel.json",
-  "start-workbench.command",
-  "start-workbench-windows.bat",
-  "scripts/sync-github-folder.mjs",
-];
+const ignoredDirs = new Set([".git", ".vercel", "data", "node_modules", "output", "dist"]);
+const ignoredSuffixes = [".zip"];
+
+function listSourceFiles(dir = root, prefix = "") {
+  return fs
+    .readdirSync(dir, { withFileTypes: true })
+    .flatMap((entry) => {
+      if (entry.name.startsWith(".") && ![".gitignore", ".vercelignore"].includes(entry.name)) return [];
+      const relative = path.join(prefix, entry.name);
+      const full = path.join(dir, entry.name);
+      if (entry.isDirectory()) {
+        if (ignoredDirs.has(entry.name)) return [];
+        return listSourceFiles(full, relative);
+      }
+      if (!entry.isFile()) return [];
+      if (ignoredSuffixes.some((suffix) => entry.name.endsWith(suffix))) return [];
+      return [relative];
+    })
+    .sort();
+}
 
 async function readToken() {
   if (process.env.GITHUB_TOKEN) return process.env.GITHUB_TOKEN.trim();
@@ -82,6 +84,7 @@ async function main() {
   const baseTree = branchInfo.commit.commit.tree.sha;
 
   const tree = [];
+  const files = listSourceFiles();
   for (const file of files) {
     const localPath = path.join(root, file);
     if (!fs.existsSync(localPath)) continue;
