@@ -30,6 +30,13 @@ function listSourceFiles(dir = root, prefix = "") {
     .sort();
 }
 
+async function listRemoteFiles(token, baseTree) {
+  const remoteTree = await githubRequest(token, "GET", `/repos/${repository}/git/trees/${baseTree}?recursive=1`);
+  return (remoteTree.tree || [])
+    .filter((item) => item.type === "blob" && item.path.startsWith(`${targetPrefix}/`))
+    .map((item) => item.path.slice(targetPrefix.length + 1));
+}
+
 async function readToken() {
   if (process.env.GITHUB_TOKEN) return process.env.GITHUB_TOKEN.trim();
   const rl = readline.createInterface({ input, output });
@@ -85,6 +92,21 @@ async function main() {
 
   const tree = [];
   const files = listSourceFiles();
+  const localFileSet = new Set(files);
+  const remoteFiles = await listRemoteFiles(token, baseTree);
+  let deletedCount = 0;
+  for (const file of remoteFiles) {
+    if (!localFileSet.has(file)) {
+      deletedCount += 1;
+      tree.push({
+        path: `${targetPrefix}/${file}`,
+        mode: "100644",
+        type: "blob",
+        sha: null,
+      });
+    }
+  }
+
   for (const file of files) {
     const localPath = path.join(root, file);
     if (!fs.existsSync(localPath)) continue;
@@ -115,7 +137,7 @@ async function main() {
     force: false,
   });
 
-  console.log(`Synced ${tree.length} files to ${repository}/${targetPrefix} at ${commit.sha}`);
+  console.log(`Synced ${files.length} files and removed ${deletedCount} stale files from ${repository}/${targetPrefix} at ${commit.sha}`);
 }
 
 main().catch((error) => {
