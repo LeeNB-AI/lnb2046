@@ -1069,6 +1069,7 @@ function buildCoverPrompt(product, title, angle, knowledge = null) {
     `产品：${product.name}`,
     `角度：${angle}`,
     `封面大字：${title}`,
+    "使用 skill：cover-design（小红书首图/封面点击率优化规则）",
     "封面设计规则：大标题 3-5 个核心词、产品主体清晰、强对比、清晰焦点、画面不拥挤",
     "版式：竖版 2:3，标题放上方或中上区域，产品图在中下方，适合小红书信息流点击",
     "视觉：真实产品摄影感，干净高级，明亮柔和，避免廉价硬广",
