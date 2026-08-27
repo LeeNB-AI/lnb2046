@@ -825,9 +825,10 @@ async function generateCover(body) {
   if (!note) throw new Error("没有找到要生成封面的笔记");
   const config = { ...defaults.modelConfig, ...state.modelConfig, ...(body.modelConfig || {}) };
   if (config.coverMode === "local-cli") throw new Error("线上版不能调用本地 Codex imagegen CLI，请切换云端 API；本机模式仍可使用 local-cli");
-  const apiKey = envCoverKey();
-  if (!apiKey) throw new Error("缺少 COVER_API_KEY 或 OPENAI_API_KEY 环境变量");
-  const data = await postJson(config.coverApiBaseUrl || process.env.COVER_API_BASE_URL || "https://api.openai.com/v1", apiKey, "/v1/images/generations", {
+  const apiKey = body.coverApiKey || config.coverApiKey || envCoverKey() || envTextKey();
+  if (!apiKey) throw new Error("缺少 COVER_API_KEY、OPENAI_API_KEY 或临时封面 API Key");
+  const apiBaseUrl = config.coverApiBaseUrl || process.env.COVER_API_BASE_URL || process.env.TEXT_API_BASE_URL || "https://api.openai.com/v1";
+  const data = await postJson(apiBaseUrl, apiKey, "/v1/images/generations", {
     model: config.imageModel || process.env.COVER_MODEL || "gpt-image-1",
     prompt: note.coverPrompt || buildCoverPrompt(state.product || defaults.product, note.coverText || note.title, note.angle, activeKnowledge(state, config.knowledgeScope || "all")),
     size: "1024x1536",
@@ -853,6 +854,19 @@ async function generateCover(body) {
     });
   }
   return { coverImage };
+}
+
+async function uploadAsset(body = {}) {
+  const raw = String(body.dataUrl || "");
+  const match = raw.match(/^data:(image\/(?:png|jpe?g|webp));base64,(.+)$/);
+  if (!match) throw new Error("只支持 png、jpg、webp 图片");
+  const asset = {
+    id: `asset-${Date.now()}-${Math.random().toString(16).slice(2, 8)}`,
+    name: body.name || "产品图",
+    path: raw,
+    createdAt: new Date().toISOString(),
+  };
+  return { asset, coverAssets: [asset] };
 }
 
 async function route(pathname, method, body) {
@@ -891,9 +905,11 @@ async function route(pathname, method, body) {
   if (method === "POST" && pathname === "/api/assets/scan-folder") {
     throw new Error("线上版不能读取你电脑里的产品图文件夹。请在本地工作台使用文件夹路径，或后续接 Supabase/网盘上传。");
   }
+  if (method === "POST" && pathname === "/api/assets/upload") return uploadAsset(body);
   if (method === "POST" && pathname === "/api/models/list") return listModels(body);
   if (method === "POST" && pathname === "/api/hotspots/import") return importHotspots(body);
   if (method === "POST" && pathname === "/api/xhs/hotspots") throw new Error("线上版不运行 xhs CLI。请在本地运行后，把 JSON 或文本粘贴到第 2 步导入。");
+  if (method === "POST" && pathname === "/api/xhs/install") throw new Error("线上网页不能直接安装或登录你电脑里的小红书 CLI。请在本地工作台运行安装/检测，或后续做桌面安装包。");
   if (method === "POST" && pathname === "/api/notes/generate") return makeNotes(body, "full");
   if (method === "POST" && pathname === "/api/notes/generate-topics") return makeNotes(body, "topic");
   if (method === "POST" && pathname === "/api/notes/generate-copy") return makeCopyForNote(body);

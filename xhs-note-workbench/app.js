@@ -807,7 +807,11 @@ function renderRuleProfiles() {
 async function scanProductImageFolder() {
   const folderPath = $("#productImageFolder")?.value.trim();
   if (!folderPath) {
-    $("#coverAssetStatus").textContent = "请先填写产品图文件夹路径";
+    $("#coverAssetStatus").textContent = "线上请点“选择文件夹”；本地可填写路径后扫描。";
+    return;
+  }
+  if (window.location.protocol !== "file:" && !/^https?:\/\/127\.0\.0\.1|^https?:\/\/localhost/i.test(getApiBaseUrl())) {
+    $("#coverAssetStatus").textContent = "线上网页不能直接扫描电脑路径，请点“选择文件夹”导入产品图。";
     return;
   }
   $("#coverAssetStatus").textContent = "正在扫描产品图文件夹...";
@@ -824,6 +828,42 @@ async function scanProductImageFolder() {
       : "文件夹里没有找到 png、jpg、jpeg、webp 图片";
   } catch (error) {
     $("#coverAssetStatus").textContent = `扫描失败：${error.message}`;
+  }
+}
+
+function fileToDataUrl(file) {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = () => resolve(reader.result);
+    reader.onerror = () => reject(new Error("读取图片失败"));
+    reader.readAsDataURL(file);
+  });
+}
+
+async function importProductImageFiles(files) {
+  const images = Array.from(files || []).filter((file) => /^image\/(png|jpe?g|webp)$/i.test(file.type)).slice(0, 20);
+  if (!images.length) {
+    $("#coverAssetStatus").textContent = "没有选到 png、jpg、webp 产品图";
+    return;
+  }
+  $("#coverAssetStatus").textContent = `正在导入 ${images.length} 张产品图...`;
+  try {
+    const coverAssets = [];
+    for (const file of images) {
+      const dataUrl = await fileToDataUrl(file);
+      const result = await api("/api/assets/upload", {
+        method: "POST",
+        body: JSON.stringify({ name: file.webkitRelativePath || file.name, dataUrl }),
+      });
+      if (result.asset) coverAssets.push(result.asset);
+    }
+    state.coverAssets = coverAssets.length ? coverAssets : state.coverAssets;
+    state.coverAssetPath = state.coverAssets[0]?.path || "";
+    $("#coverAssetStatus").textContent = state.coverAssetPath
+      ? `已导入 ${state.coverAssets.length} 张产品图，生成封面时会优先参考`
+      : "产品图导入完成，但没有可用图片";
+  } catch (error) {
+    $("#coverAssetStatus").textContent = `导入失败：${error.message}`;
   }
 }
 
@@ -1249,6 +1289,7 @@ async function generateCoversForAllNotes(button) {
         body: JSON.stringify({
           note,
           modelConfig: getModelConfig(),
+          coverApiKey: $("#coverApiKey")?.value.trim() || "",
           coverAssetPath: state.coverAssetPath || note.coverAssetPath || "",
           productImageFolder: $("#productImageFolder")?.value.trim() || state.productImageFolder || "",
           coverBrief: $("#coverBriefBox")?.value.trim() || note.coverBrief || "",
@@ -1364,6 +1405,7 @@ async function generateSelectedCover(button) {
       body: JSON.stringify({
         note,
         modelConfig: getModelConfig(),
+        coverApiKey: $("#coverApiKey")?.value.trim() || "",
         coverAssetPath: state.coverAssetPath || note.coverAssetPath || "",
         productImageFolder: $("#productImageFolder")?.value.trim() || state.productImageFolder || "",
         coverBrief: $("#coverBriefBox").value.trim() || note.coverBrief || "",
@@ -1505,6 +1547,11 @@ function bindEvents() {
     renderManagers();
     await saveKnowledge();
   });
+  $("#pickProductFolderBtn")?.addEventListener("click", () => $("#productImageFiles")?.click());
+  $("#productImageFiles")?.addEventListener("change", async (event) => {
+    await importProductImageFiles(event.target.files);
+    event.target.value = "";
+  });
   $("#scanProductFolderBtn")?.addEventListener("click", scanProductImageFolder);
   $("#previewKnowledgeImportBtn").addEventListener("click", previewKnowledgeImport);
   $("#applyKnowledgeImportBtn").addEventListener("click", applyKnowledgeImport);
@@ -1581,6 +1628,25 @@ function bindEvents() {
       button.textContent = "保存服务设置";
     } finally {
       window.setTimeout(() => (button.disabled = false), 900);
+    }
+  });
+  $("#installXhsCliBtn")?.addEventListener("click", async () => {
+    const button = $("#installXhsCliBtn");
+    button.disabled = true;
+    button.textContent = "检测中...";
+    try {
+      const result = await api("/api/xhs/install", {
+        method: "POST",
+        body: JSON.stringify({ xhsCliPath: $("#xhsCliPath")?.value.trim() || "" }),
+      });
+      if (result.xhsCliPath) $("#xhsCliPath").value = result.xhsCliPath;
+      $("#xhsConfigStatus").textContent = result.message || "CLI 已可用";
+      await loadStatus();
+    } catch (error) {
+      $("#xhsConfigStatus").textContent = `CLI 安装/检测失败：${error.message}`;
+    } finally {
+      button.disabled = false;
+      button.textContent = "安装/检测 CLI";
     }
   });
 
