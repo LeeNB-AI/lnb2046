@@ -1307,9 +1307,9 @@ async function generateSelectedCopy(button) {
     await saveKnowledge();
     const result = await api("/api/notes/generate-copy", {
       method: "POST",
-      body: JSON.stringify({ ...generationPayload(), noteId: note.id, note }),
+      body: JSON.stringify({ ...generationPayload(), noteId: note.id, note, notes: state.notes }),
     });
-    state.notes = result.notes || state.notes;
+    state.notes = Array.isArray(result.notes) && result.notes.length ? result.notes : state.notes.map((item) => (item.id === (result.note?.id || note.id) ? { ...item, ...(result.note || {}) } : item));
     state.history = result.history || state.history;
     state.stats = result.stats || state.stats;
     $("#qualityScore").textContent = qualitySummaryText(result.qualitySummary);
