@@ -1017,8 +1017,10 @@ async function makeCopyForNote(payload) {
   const scope = payload.knowledgeScope || modelConfig.knowledgeScope || "all";
   const tone = payload.tone || modelConfig.tone || "mixed";
   const knowledge = activeKnowledge(state, scope);
-  const noteIndex = Math.max(0, state.notes.findIndex((note) => note.id === payload.noteId));
-  const current = state.notes[noteIndex] || payload.note;
+  const clientNotes = Array.isArray(payload.notes) ? payload.notes : [];
+  const sourceNotes = state.notes.length ? state.notes : clientNotes;
+  const noteIndex = Math.max(0, sourceNotes.findIndex((note) => note.id === payload.noteId));
+  const current = sourceNotes[noteIndex] || payload.note;
   if (!current) throw new Error("请先生成或选择一个选题");
   const angle = angles.find((item) => item.type === current.angle) || angles[noteIndex % angles.length] || angles[0];
   const tags = hotspot.tags.length ? hotspot.tags : fallbackHotspots.tags;
@@ -1051,7 +1053,7 @@ async function makeCopyForNote(payload) {
   state.modelConfig = modelConfig;
   state.topicLibrary = hotspot;
   state.hotspots = hotspot;
-  state.notes = state.notes.map((note) => (note.id === current.id ? nextNote : note));
+  state.notes = sourceNotes.length ? sourceNotes.map((note) => (note.id === current.id ? nextNote : note)) : [nextNote];
   state.history = (state.history || []).map((batch) =>
     (batch.noteIds || []).includes(current.id)
       ? { ...batch, notes: (batch.notes || []).map((note) => (note.id === current.id ? nextNote : note)) }

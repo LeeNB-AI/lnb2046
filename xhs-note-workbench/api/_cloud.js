@@ -728,13 +728,15 @@ async function makeNotes(body, copyMode = "full") {
 
 async function makeCopyForNote(body) {
   const state = await loadCloudState();
-  const current = state.notes.find((note) => note.id === body.noteId) || body.note;
+  const clientNotes = Array.isArray(body.notes) ? body.notes : [];
+  const sourceNotes = state.notes.length ? state.notes : clientNotes;
+  const current = sourceNotes.find((note) => note.id === body.noteId) || body.note;
   if (!current) throw new Error("请先生成或选择一个选题");
   const product = body.product || state.product || defaults.product;
   const modelConfig = { ...defaults.modelConfig, ...state.modelConfig, ...(body.modelConfig || {}) };
   const hotspot = body.hotspots || state.hotspots || fallbackHotspots;
   const knowledge = activeKnowledge(state, body.knowledgeScope || modelConfig.knowledgeScope || "all");
-  const noteIndex = Math.max(0, state.notes.findIndex((note) => note.id === current.id));
+  const noteIndex = Math.max(0, sourceNotes.findIndex((note) => note.id === current.id));
   const angle = angles.find((item) => item.type === current.angle) || angles[noteIndex % angles.length] || angles[0];
   let nextNote = {
     ...current,
@@ -749,7 +751,7 @@ async function makeCopyForNote(body) {
   } catch (error) {
     nextNote.generationWarning = `云端文案生成失败，已回退本地模板：${shortError(error.message)}`;
   }
-  const notes = state.notes.map((note) => (note.id === nextNote.id ? nextNote : note));
+  const notes = sourceNotes.length ? sourceNotes.map((note) => (note.id === nextNote.id ? nextNote : note)) : [nextNote];
   if (hasSupabase()) {
     await supabase(`notes?id=eq.${encodeURIComponent(nextNote.id)}&user_id=eq.${encodeURIComponent(USER_ID)}`, {
       method: "PATCH",
@@ -935,6 +937,7 @@ function createHandler(pathname) {
       const data = await route(pathname, req.method, body);
       return send(res, 200, data);
     } catch (error) {
+      console.error(`[api] ${req.method} ${pathname}`, error);
       return send(res, 500, { error: error.message || String(error) });
     }
   };
@@ -949,6 +952,7 @@ function createDynamicHandler() {
       const data = await route(url.pathname, req.method, body);
       return send(res, 200, data);
     } catch (error) {
+      console.error(`[api] ${req.method} ${req.url}`, error);
       return send(res, 500, { error: error.message || String(error) });
     }
   };
