@@ -348,10 +348,10 @@ function normalizeState(state) {
     coverProvider: next.modelConfig?.coverProvider || "OpenAI",
     coverApiBaseUrl: next.modelConfig?.coverApiBaseUrl || "https://api.openai.com/v1",
     imageModel: next.modelConfig?.imageModel || "gpt-image-1",
-    imageCliPath: "",
-    pythonPath: "",
+    imageCliPath: next.modelConfig?.imageCliPath || defaults.modelConfig.imageCliPath,
+    pythonPath: next.modelConfig?.pythonPath || defaults.modelConfig.pythonPath,
     productImageFolder: next.modelConfig?.productImageFolder || "",
-    xhsCliPath: "",
+    xhsCliPath: next.modelConfig?.xhsCliPath || process.env.XHS_BIN || "/Users/libucuo/.local/bin/xhs",
   };
   next.productProfiles = Array.isArray(next.productProfiles) ? next.productProfiles : [];
   next.history = Array.isArray(next.history) ? next.history : [];
