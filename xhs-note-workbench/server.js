@@ -851,6 +851,83 @@ function buildBaseNotes({ product, hotspot, knowledge, modelConfig, tone, noteCo
   });
 }
 
+async function generateNotesWithTextApi({ modelConfig, product, hotspot, knowledge, notes, copyMode = "full", tone = "mixed" }) {
+  const secrets = readSecrets();
+  const apiKey = modelConfig?.textApiKey || secrets.textApiKey;
+  if (!apiKey || !["cloud", "cloud-api"].includes(modelConfig.textMode)) return notes;
+  const task =
+    copyMode === "topic"
+      ? "只生成选题草稿：每篇必须有 angle、title、coverText；body、tags、comments 可以为空。"
+      : "生成完整小红书笔记：每篇必须有 angle、title、body、tags、comments、coverText。";
+  const parsed = await postModelJson({
+    apiBaseUrl: modelConfig.textApiBaseUrl || "https://api.openai.com/v1",
+    apiKey,
+    model: modelConfig.textModel || "gpt-5",
+    temperature: Number(modelConfig.temperature ?? 0.75),
+    messages: [
+      {
+        role: "system",
+        content:
+          "你是小红书成人/两性健康品类的合规内容策划。必须结合用户商品资料、本地知识库、AI 分类规则和热点素材生成。只输出 JSON，避免医疗承诺、低俗露骨、未成年人相关内容，不照抄高风险热点。",
+      },
+      {
+        role: "user",
+        content: JSON.stringify(
+          {
+            task,
+            outputSchema: { notes: [{ angle: "", title: "", body: "", tags: "", comments: [""], coverText: "" }] },
+            hardRequirements: [
+              "固定生成不同角度，优先覆盖痛点共鸣、场景种草、测评体验、对比避坑、品牌卖点",
+              "标题必须吸收热点素材里的表达方式或选题方向，但不能直接照抄 risky 低俗表达",
+              "正文必须使用知识库词库和模板，不要只套默认模板",
+              "成人/两性健康场景必须合规，弱化露骨表达、医疗功效承诺和夸大效果",
+              "每篇标题结构、开头方式、卖点植入方式必须不同",
+            ],
+            product,
+            hotspot,
+            knowledge,
+            tone,
+            draftNotes: notes.map(({ id, angle, title, body, tags, comments, coverText }) => ({
+              id,
+              angle,
+              title,
+              body,
+              tags,
+              comments,
+              coverText,
+            })),
+            seed: `${Date.now()}-${Math.random()}`,
+          },
+          null,
+          2,
+        ),
+      },
+    ],
+  });
+  if (!parsed?.notes?.length) throw new Error("文案 API 未返回 notes JSON");
+  return parsed.notes.slice(0, notes.length).map((item, index) => {
+    const fallback = notes[index];
+    const title = String(item.title || fallback.title).trim();
+    const body = copyMode === "topic" ? "" : String(item.body || fallback.body).trim();
+    const comments = copyMode === "topic" ? [] : Array.isArray(item.comments) ? item.comments.slice(0, 3).map(String) : fallback.comments;
+    const tags = copyMode === "topic" ? "" : String(item.tags || fallback.tags).trim();
+    const note = {
+      ...fallback,
+      angle: item.angle || fallback.angle,
+      title,
+      body,
+      tags,
+      comments,
+      coverText: item.coverText || title,
+      coverPrompt: buildCoverPrompt(product, item.coverText || title, item.angle || fallback.angle, knowledge),
+      modelSource: "cloud-text-api",
+      stage: copyMode === "topic" ? "topic" : "copy",
+    };
+    note.quality = qualityCheck({ title: note.title, body: note.body, comments: note.comments, product, blockedTerms: product.blockedTerms });
+    return note;
+  });
+}
+
 async function makeNotes(payload) {
   const state = readState();
   if (payload.activeRuleId !== undefined) state.activeRuleId = payload.activeRuleId;
@@ -866,7 +943,11 @@ async function makeNotes(payload) {
   const variantSeed = now + Math.floor(Math.random() * 10000);
   let notes = buildBaseNotes({ product, hotspot, knowledge, modelConfig, tone, noteCount, copyMode: "full", variantSeed });
 
-  notes = notes.map((note) => ({ ...note, modelSource: "cloud-api" }));
+  try {
+    notes = await generateNotesWithTextApi({ modelConfig, product, hotspot, knowledge, notes, copyMode: "full", tone });
+  } catch (error) {
+    notes = notes.map((note) => ({ ...note, modelSource: "offline-rules", generationWarning: `AI 文案生成失败，已回退本地规则：${shortError(error.message)}` }));
+  }
 
   const nextState = readState();
   nextState.product = product;
@@ -900,7 +981,12 @@ async function makeTopicDrafts(payload) {
   const now = Date.now();
   const noteCount = Math.max(1, Math.min(5, Number(modelConfig.noteCount || 5)));
   const variantSeed = now + Math.floor(Math.random() * 10000);
-  const notes = buildBaseNotes({ product, hotspot, knowledge, modelConfig, tone, noteCount, copyMode: "topic", variantSeed });
+  let notes = buildBaseNotes({ product, hotspot, knowledge, modelConfig, tone, noteCount, copyMode: "topic", variantSeed });
+  try {
+    notes = await generateNotesWithTextApi({ modelConfig, product, hotspot, knowledge, notes, copyMode: "topic", tone });
+  } catch (error) {
+    notes = notes.map((note) => ({ ...note, modelSource: "offline-rules", generationWarning: `AI 选题生成失败，已回退本地规则：${shortError(error.message)}` }));
+  }
   const nextState = readState();
   nextState.product = product;
   nextState.modelConfig = modelConfig;
@@ -946,7 +1032,13 @@ async function makeCopyForNote(payload) {
     stage: "copy",
   };
 
-  nextNote.modelSource = "offline-rules";
+  try {
+    const generated = await generateNotesWithTextApi({ modelConfig, product, hotspot, knowledge, notes: [nextNote], copyMode: "full", tone });
+    nextNote = { ...nextNote, ...generated[0], id: current.id, publishStatus: current.publishStatus || "draft", stage: "copy" };
+  } catch (error) {
+    nextNote.modelSource = "offline-rules";
+    nextNote.generationWarning = `AI 文案生成失败，已回退本地规则：${shortError(error.message)}`;
+  }
 
   nextNote.quality = qualityCheck({
     title: nextNote.title,

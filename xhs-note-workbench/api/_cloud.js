@@ -45,6 +45,20 @@ const defaults = {
     knowledgeScope: "all",
     tone: "mixed",
   },
+  analysisRules: {
+    summary: "",
+    keyPoints: [],
+    titleRules: "",
+    bodyRules: "",
+    copyRules: "",
+    coverRules: "",
+    styleKeywords: [],
+    forbiddenPatterns: [],
+    source: "",
+    importedAt: null,
+  },
+  ruleProfiles: [],
+  activeRuleId: "",
 };
 
 const fallbackHotspots = {
@@ -227,6 +241,9 @@ async function loadCloudState() {
     notes: [],
     history: [],
     productProfiles: [],
+    analysisRules: defaults.analysisRules,
+    ruleProfiles: [],
+    activeRuleId: "",
   };
   if (!hasSupabase()) return { ...state, stats: buildStats(state), supabaseConfigured: false };
 
@@ -243,6 +260,9 @@ async function loadCloudState() {
   state.product = { ...state.product, ...(knowledge.product || {}) };
   state.terms = { ...state.terms, ...(knowledge.terms || {}) };
   state.modelConfig = { ...state.modelConfig, ...(knowledge.model_config || {}) };
+  state.ruleProfiles = Array.isArray(knowledge.model_config?.ruleProfiles) ? knowledge.model_config.ruleProfiles : [];
+  state.activeRuleId = knowledge.model_config?.activeRuleId || state.ruleProfiles[0]?.id || "";
+  state.analysisRules = { ...defaults.analysisRules, ...(knowledge.model_config?.analysisRules || {}) };
   state.templates = { ...state.templates, ...(templateRows?.[0]?.templates || {}) };
   state.productProfiles = (profileRows || []).map((row) => ({ id: row.id, ...(row.data || {}), updatedAt: row.updated_at }));
   state.hotspots = importRows?.[0]?.hotspots || null;
@@ -281,7 +301,12 @@ async function saveKnowledge(body) {
         user_id: USER_ID,
         terms: body.terms || defaults.terms,
         product: body.product || defaults.product,
-        model_config: body.modelConfig || defaults.modelConfig,
+        model_config: {
+          ...(body.modelConfig || defaults.modelConfig),
+          ruleProfiles: Array.isArray(body.ruleProfiles) ? body.ruleProfiles : [],
+          activeRuleId: body.activeRuleId || "",
+          analysisRules: body.analysisRules || defaults.analysisRules,
+        },
         updated_at: new Date().toISOString(),
       },
     }),
@@ -343,10 +368,28 @@ async function importHotspots(body) {
 }
 
 function activeKnowledge(state, scope) {
+  const activeRule = (state.ruleProfiles || []).find((rule) => rule.id === state.activeRuleId) || null;
+  const baseTerms = scope === "all" || scope === "terms" ? state.terms : {};
+  const baseTemplates = scope === "all" || scope === "templates" ? state.templates : {};
   return {
-    terms: scope === "all" || scope === "terms" ? state.terms : {},
-    templates: scope === "all" || scope === "templates" ? state.templates : {},
+    terms: activeRule ? mergeKnowledgeGroup(baseTerms, activeRule.terms) : baseTerms,
+    templates: activeRule ? mergeKnowledgeGroup(baseTemplates, activeRule.templates) : baseTemplates,
+    analysisRules: activeRule?.analysisRules || state.analysisRules || defaults.analysisRules,
+    activeRule,
   };
+}
+
+function mergeText(a, b) {
+  const parts = splitWords([a, b].filter(Boolean).join("、"));
+  return unique(parts, 60).join("、");
+}
+
+function mergeKnowledgeGroup(base = {}, extra = {}) {
+  const result = { ...(base || {}) };
+  Object.entries(extra || {}).forEach(([key, value]) => {
+    result[key] = mergeText(result[key], value);
+  });
+  return result;
 }
 
 function publicCategory(category) {
@@ -575,15 +618,39 @@ async function listModels(body = {}) {
   return { models };
 }
 
-async function generateNotesWithTextApi({ modelConfig, product, hotspot, knowledge, notes }) {
+async function generateNotesWithTextApi({ modelConfig, product, hotspot, knowledge, notes, copyMode = "full", tone = "mixed" }) {
   const apiKey = envTextKey();
   if (!apiKey || !["cloud", "cloud-api"].includes(modelConfig.textMode)) return notes;
-  const prompt = JSON.stringify({ product, hotspot, knowledge, requiredAngles: angles.map((item) => item.type), seed: Date.now() }, null, 2);
+  const task =
+    copyMode === "topic"
+      ? "只生成选题草稿：每篇必须有 angle、title、coverText；body、tags、comments 可以为空。"
+      : "生成完整小红书笔记：每篇必须有 angle、title、body、tags、comments、coverText。";
+  const prompt = JSON.stringify(
+    {
+      task,
+      product,
+      hotspot,
+      knowledge,
+      tone,
+      requiredAngles: angles.map((item) => item.type),
+      hardRequirements: [
+        "必须结合用户商品资料、本地知识库、AI 分类规则和热点素材",
+        "标题吸收热点表达方式或选题方向，但不照抄 risky 低俗表达",
+        "正文使用知识库词库和模板，不要只套默认模板",
+        "每篇标题结构、开头方式、卖点植入方式必须不同",
+        "成人/两性健康场景必须弱化露骨表达、医疗功效承诺和夸大效果",
+      ],
+      draftNotes: notes.map(({ id, angle, title, body, tags, comments, coverText }) => ({ id, angle, title, body, tags, comments, coverText })),
+      seed: `${Date.now()}-${Math.random()}`,
+    },
+    null,
+    2,
+  );
   const data = await postJson(modelConfig.textApiBaseUrl || process.env.TEXT_API_BASE_URL || "https://api.openai.com/v1", apiKey, "/v1/chat/completions", {
     model: modelConfig.textModel || process.env.TEXT_MODEL || "gpt-5",
     temperature: Number(modelConfig.temperature ?? 0.8),
     messages: [
-      { role: "system", content: "你是小红书成人/两性健康品类的合规内容策划。只输出 JSON，避免医疗承诺、低俗露骨、未成年人相关内容。" },
+      { role: "system", content: "你是小红书成人/两性健康品类的合规内容策划。必须结合用户资料、知识库和热点素材生成。只输出 JSON，避免医疗承诺、低俗露骨、未成年人相关内容。" },
       { role: "user", content: `生成 ${notes.length} 篇差异化笔记，JSON 格式为 {"notes":[{"angle":"","title":"","body":"","tags":"","comments":[""],"coverText":""}]}。\n${prompt}` },
     ],
     response_format: { type: "json_object" },
@@ -593,18 +660,19 @@ async function generateNotesWithTextApi({ modelConfig, product, hotspot, knowled
   return parsed.notes.slice(0, notes.length).map((item, index) => {
     const fallback = notes[index];
     const title = String(item.title || fallback.title).trim();
-    const body = String(item.body || fallback.body).trim();
-    const comments = Array.isArray(item.comments) ? item.comments.slice(0, 3).map(String) : fallback.comments;
+    const body = copyMode === "topic" ? "" : String(item.body || fallback.body).trim();
+    const comments = copyMode === "topic" ? [] : Array.isArray(item.comments) ? item.comments.slice(0, 3).map(String) : fallback.comments;
     return {
       ...fallback,
       angle: item.angle || fallback.angle,
       title,
       body,
-      tags: String(item.tags || fallback.tags).trim(),
+      tags: copyMode === "topic" ? "" : String(item.tags || fallback.tags).trim(),
       comments,
       coverText: item.coverText || title,
       coverPrompt: buildCoverPrompt(product, title, item.angle || fallback.angle, knowledge),
       modelSource: "cloud-text-api",
+      stage: copyMode === "topic" ? "topic" : "copy",
       quality: qualityCheck({ title, body, comments, blockedTerms: product.blockedTerms }),
     };
   });
@@ -648,12 +716,11 @@ async function makeNotes(body, copyMode = "full") {
   const knowledge = activeKnowledge(state, body.knowledgeScope || modelConfig.knowledgeScope || "all");
   const noteCount = Math.max(1, Math.min(5, Number(modelConfig.noteCount || 5)));
   let notes = buildBaseNotes({ product, hotspot, knowledge, modelConfig, tone: body.tone || modelConfig.tone || "mixed", noteCount, copyMode });
-  if (copyMode !== "topic") {
-    try {
-      notes = await generateNotesWithTextApi({ modelConfig, product, hotspot, knowledge, notes });
-    } catch (error) {
-      notes = notes.map((note) => ({ ...note, generationWarning: `云端文案生成失败，已回退本地模板：${shortError(error.message)}` }));
-    }
+  try {
+    notes = await generateNotesWithTextApi({ modelConfig, product, hotspot, knowledge, notes, copyMode, tone: body.tone || modelConfig.tone || "mixed" });
+  } catch (error) {
+    const stageName = copyMode === "topic" ? "选题" : "文案";
+    notes = notes.map((note) => ({ ...note, generationWarning: `云端${stageName}生成失败，已回退本地模板：${shortError(error.message)}` }));
   }
   return persistNotes(product, notes, copyMode === "topic" ? "topic" : "copy");
 }
@@ -676,7 +743,7 @@ async function makeCopyForNote(body) {
     stage: "copy",
   };
   try {
-    const generated = await generateNotesWithTextApi({ modelConfig, product, hotspot, knowledge, notes: [nextNote] });
+    const generated = await generateNotesWithTextApi({ modelConfig, product, hotspot, knowledge, notes: [nextNote], copyMode: "full", tone: body.tone || modelConfig.tone || "mixed" });
     nextNote = { ...nextNote, ...generated[0], id: current.id, publishStatus: current.publishStatus || "draft", stage: "copy" };
   } catch (error) {
     nextNote.generationWarning = `云端文案生成失败，已回退本地模板：${shortError(error.message)}`;
