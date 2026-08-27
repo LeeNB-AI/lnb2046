@@ -307,7 +307,9 @@
                   上传产品图文件夹
                   <input id="productImageFolder" placeholder="例如：/Users/你的名字/Pictures/产品图 或 D:\\素材\\产品图" />
                 </label>
-                <button id="scanProductFolderBtn" class="secondary-btn" type="button">扫描文件夹</button>
+                <input id="productImageFiles" class="hidden-file-input" type="file" accept="image/png,image/jpeg,image/webp" multiple webkitdirectory />
+                <button id="pickProductFolderBtn" class="secondary-btn" type="button">选择文件夹</button>
+                <button id="scanProductFolderBtn" class="secondary-btn" type="button">扫描路径</button>
               </div>
               <p id="coverAssetStatus" class="field-status">未指定产品图文件夹</p>
               <label>
@@ -476,6 +478,7 @@
               </select>
             </label>
             <div class="api-config-actions">
+              <button id="installXhsCliBtn" class="secondary-btn" type="button">安装/检测 CLI</button>
               <button id="testXhsCliBtn" class="secondary-btn" type="button">测试连接</button>
               <button id="fetchXhsCliBtn" class="secondary-btn" type="button">拉取热点</button>
               <button id="saveXhsConfigBtn" class="secondary-btn" type="button">保存 CLI 设置</button>

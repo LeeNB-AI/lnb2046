@@ -590,6 +590,37 @@ async function fetchHotspots(product) {
   return result;
 }
 
+async function installOrDetectXhsCli(payload = {}) {
+  const state = readState();
+  const candidates = unique(
+    [
+      payload.xhsCliPath,
+      state.modelConfig?.xhsCliPath,
+      process.env.XHS_BIN,
+      "/Users/libucuo/.local/bin/xhs",
+      "/opt/homebrew/bin/xhs",
+      "/usr/local/bin/xhs",
+      "xhs",
+    ].filter(Boolean),
+    12,
+  );
+  for (const candidate of candidates) {
+    try {
+      await execFileJson(candidate, ["--help"], 8000);
+      state.modelConfig = { ...state.modelConfig, xhsCliPath: candidate };
+      writeState(state);
+      return {
+        available: true,
+        xhsCliPath: candidate,
+        message: `已检测到小红书 CLI：${candidate}。如果未登录，请在终端运行登录命令后扫码/输入账号。`,
+      };
+    } catch {
+      // Try the next known location.
+    }
+  }
+  throw new Error("没有检测到 xhs CLI。线上网页不能直接安装电脑程序；本地版可把 CLI 放进 vendor/xhs 后再做一键安装脚本。");
+}
+
 async function resetTopicLibrary(product) {
   const state = readState();
   const keywords = unique(
@@ -1173,6 +1204,7 @@ function buildCoverSvg(note, product, index) {
 
 function imageDataUriFromPublicPath(publicPath) {
   if (!publicPath) return "";
+  if (/^data:image\/(?:png|jpe?g|webp);base64,/i.test(publicPath)) return publicPath;
   const assetPath = path.isAbsolute(publicPath)
     ? publicPath
     : publicPath.startsWith("/output/assets/")
@@ -1371,6 +1403,10 @@ function createAppServer() {
     if (req.method === "POST" && url.pathname === "/api/xhs/hotspots") {
       const body = await readBody(req);
       return send(res, 200, await fetchHotspots(body.product || defaults.product));
+    }
+    if (req.method === "POST" && url.pathname === "/api/xhs/install") {
+      const body = await readBody(req);
+      return send(res, 200, await installOrDetectXhsCli(body));
     }
     if (req.method === "POST" && url.pathname === "/api/topic-library/reset") {
       const body = await readBody(req);
