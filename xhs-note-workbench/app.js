@@ -69,10 +69,11 @@ async function api(path, options = {}) {
 }
 
 function defaultApiBaseUrl() {
-  return window.location.protocol === "file:" ? "http://127.0.0.1:4173" : "";
+  return window.location.protocol === "file:" ? "http://127.0.0.1:4173" : window.location.origin;
 }
 
 function getApiBaseUrl() {
+  if (window.location.protocol !== "file:") return window.location.origin.replace(/\/$/, "");
   return ($("#apiBaseUrl")?.value || localStorage.getItem(API_BASE_KEY) || defaultApiBaseUrl()).trim().replace(/\/$/, "");
 }
 
@@ -91,7 +92,13 @@ function assetUrl(path) {
 
 function initApiConfigInputs() {
   const input = $("#apiBaseUrl");
-  if (input) input.value = localStorage.getItem(API_BASE_KEY) || defaultApiBaseUrl() || window.location.origin;
+  if (!input) return;
+  if (window.location.protocol !== "file:") {
+    input.value = window.location.origin;
+    localStorage.setItem(API_BASE_KEY, window.location.origin);
+    return;
+  }
+  input.value = localStorage.getItem(API_BASE_KEY) || defaultApiBaseUrl();
 }
 
 function getProductInput() {
