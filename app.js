@@ -1139,6 +1139,7 @@ function renderSelectedNote() {
     $("#previewTags").textContent = "#女生护理 #亲密关系";
     $("#previewComments").innerHTML = "";
     $("#previewCoverText").textContent = "等待生成";
+    renderPreviewCoverGallery(null);
     $("#coverPromptBox").value = "";
     $("#coverVariantList").innerHTML = "";
     $("#coverOutputPath").value = "";
@@ -1210,6 +1211,7 @@ function renderSelectedNote() {
     $("#coverDownloadBtn").classList.add("hidden");
     $("#coverDownloadBtn").removeAttribute("href");
   }
+  renderPreviewCoverGallery(note);
 }
 
 function renderCoverVariants(note) {
@@ -1231,6 +1233,56 @@ function renderCoverVariants(note) {
   $all("[data-cover-variant]").forEach((button) => {
     button.addEventListener("click", () => {
       state.selectedCoverVariant = Number(button.dataset.coverVariant);
+      note.coverImage = variants[state.selectedCoverVariant]?.image || note.coverImage;
+      renderSelectedNote();
+    });
+  });
+}
+
+function renderPreviewCoverGallery(note) {
+  const gallery = $("#previewCoverGallery");
+  if (!gallery) return;
+  if (!note) {
+    gallery.innerHTML = "";
+    return;
+  }
+
+  const variants = Array.isArray(note.coverVariants) && note.coverVariants.length
+    ? note.coverVariants
+    : note.coverImage
+      ? [{ label: "当前封面", image: note.coverImage, source: note.coverImage }]
+      : [];
+  state.selectedCoverVariant = Math.min(state.selectedCoverVariant || 0, Math.max(variants.length - 1, 0));
+
+  if (!variants.length) {
+    const count = Math.max(1, Math.min(4, Number($("#coverCount")?.value || 1)));
+    gallery.innerHTML = Array.from(
+      { length: count },
+      (_, index) => `
+        <div class="preview-cover-card empty">
+          <div class="preview-cover-thumb">封面 ${index + 1}</div>
+          <strong>待生成</strong>
+        </div>
+      `,
+    ).join("");
+    return;
+  }
+
+  gallery.innerHTML = variants
+    .map((variant, index) => {
+      const isActive = index === state.selectedCoverVariant;
+      return `
+        <button class="preview-cover-card ${isActive ? "active" : ""}" data-preview-cover="${index}" type="button">
+          <img class="preview-cover-thumb" src="${escapeHtml(displayAssetUrl(variant.image))}" alt="封面预览 ${index + 1}" />
+          <strong>${escapeHtml(variant.label || `封面 ${index + 1}`)}</strong>
+        </button>
+      `;
+    })
+    .join("");
+
+  $all("[data-preview-cover]").forEach((button) => {
+    button.addEventListener("click", () => {
+      state.selectedCoverVariant = Number(button.dataset.previewCover);
       note.coverImage = variants[state.selectedCoverVariant]?.image || note.coverImage;
       renderSelectedNote();
     });
@@ -2060,6 +2112,7 @@ function bindEvents() {
 
   $("#coverBtn").addEventListener("click", () => generateSelectedCover($("#coverBtn")));
   $("#coverTopBtn").addEventListener("click", () => generateSelectedCover($("#coverTopBtn")));
+  $("#coverCount")?.addEventListener("change", renderSelectedNote);
   $("#previewRefreshBtn").addEventListener("click", renderSelectedNote);
 }
 
