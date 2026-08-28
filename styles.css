@@ -473,6 +473,22 @@ select:focus {
   line-height: 1.4;
 }
 
+.cover-export-box {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 10px;
+  align-items: end;
+  margin: 12px 0;
+}
+
+.cover-export-box .secondary-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 44px;
+  text-decoration: none;
+}
+
 .field-status {
   margin: -4px 0 12px;
   color: var(--muted);

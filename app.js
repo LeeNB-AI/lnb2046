@@ -62,6 +62,9 @@ async function api(path, options = {}) {
     }
   } else {
     const preview = rawText.replace(/\s+/g, " ").trim().slice(0, 90) || `HTTP ${response.status}`;
+    if (response.status === 413 || /PAYLOAD_TOO_LARGE|Request Entity Too Large/i.test(preview)) {
+      throw new Error("上传内容太大：产品图已自动压缩，请少选几张或换更小的图片再试。");
+    }
     throw new Error(`接口没有返回 JSON，可能是工作台服务地址不对或服务返回了网页：${preview}`);
   }
   if (!response.ok || data.error) throw new Error(data.error || "请求失败");
@@ -88,6 +91,37 @@ function assetUrl(path) {
   if (/^(https?:|file:|data:|blob:)/i.test(path)) return path;
   const base = window.location.protocol === "file:" ? getApiBaseUrl() : "";
   return `${base}${path}`;
+}
+
+function displayAssetUrl(path) {
+  const url = assetUrl(path);
+  if (!url || /^(data:|blob:)/i.test(url)) return url;
+  return `${url}${url.includes("?") ? "&" : "?"}t=${Date.now()}`;
+}
+
+function isLocalWorkbench() {
+  const base = getApiBaseUrl();
+  return window.location.protocol === "file:" || /^https?:\/\/(127\.0\.0\.1|localhost)(:\d+)?$/i.test(base);
+}
+
+function apiSafeAssetPath(path) {
+  if (!path || /^data:/i.test(path)) return "";
+  return path;
+}
+
+function coverSourceText(coverImage) {
+  if (!coverImage) return "";
+  if (/^data:/i.test(coverImage)) return "线上临时图片，可直接导出下载";
+  if (/^https?:/i.test(coverImage)) return coverImage;
+  return assetUrl(coverImage);
+}
+
+function downloadNameForNote(note) {
+  const base = String(note?.title || note?.id || "xhs-cover")
+    .replace(/[\\/:*?"<>|]/g, "")
+    .replace(/\s+/g, "-")
+    .slice(0, 36);
+  return `${base || "xhs-cover"}.png`;
 }
 
 function initApiConfigInputs() {
@@ -810,7 +844,7 @@ async function scanProductImageFolder() {
     $("#coverAssetStatus").textContent = "线上请点“选择文件夹”；本地可填写路径后扫描。";
     return;
   }
-  if (window.location.protocol !== "file:" && !/^https?:\/\/127\.0\.0\.1|^https?:\/\/localhost/i.test(getApiBaseUrl())) {
+  if (!isLocalWorkbench()) {
     $("#coverAssetStatus").textContent = "线上网页不能直接扫描电脑路径，请点“选择文件夹”导入产品图。";
     return;
   }
@@ -840,6 +874,28 @@ function fileToDataUrl(file) {
   });
 }
 
+function loadImageForResize(dataUrl) {
+  return new Promise((resolve, reject) => {
+    const image = new Image();
+    image.onload = () => resolve(image);
+    image.onerror = () => reject(new Error("图片无法预览或格式不受支持"));
+    image.src = dataUrl;
+  });
+}
+
+async function compressImageFile(file, maxSide = 1280, quality = 0.76) {
+  const original = await fileToDataUrl(file);
+  if (file.size <= 900 * 1024) return original;
+  const image = await loadImageForResize(original);
+  const scale = Math.min(1, maxSide / Math.max(image.naturalWidth || image.width, image.naturalHeight || image.height));
+  const canvas = document.createElement("canvas");
+  canvas.width = Math.max(1, Math.round((image.naturalWidth || image.width) * scale));
+  canvas.height = Math.max(1, Math.round((image.naturalHeight || image.height) * scale));
+  const context = canvas.getContext("2d");
+  context.drawImage(image, 0, 0, canvas.width, canvas.height);
+  return canvas.toDataURL("image/jpeg", quality);
+}
+
 async function importProductImageFiles(files) {
   const images = Array.from(files || []).filter((file) => /^image\/(png|jpe?g|webp)$/i.test(file.type)).slice(0, 20);
   if (!images.length) {
@@ -850,12 +906,21 @@ async function importProductImageFiles(files) {
   try {
     const coverAssets = [];
     for (const file of images) {
-      const dataUrl = await fileToDataUrl(file);
-      const result = await api("/api/assets/upload", {
-        method: "POST",
-        body: JSON.stringify({ name: file.webkitRelativePath || file.name, dataUrl }),
-      });
-      if (result.asset) coverAssets.push(result.asset);
+      const dataUrl = await compressImageFile(file);
+      if (isLocalWorkbench()) {
+        const result = await api("/api/assets/upload", {
+          method: "POST",
+          body: JSON.stringify({ name: file.webkitRelativePath || file.name, dataUrl }),
+        });
+        if (result.asset) coverAssets.push(result.asset);
+      } else {
+        coverAssets.push({
+          id: `browser-asset-${Date.now()}-${Math.random().toString(16).slice(2, 8)}`,
+          name: file.webkitRelativePath || file.name,
+          path: dataUrl,
+          createdAt: new Date().toISOString(),
+        });
+      }
     }
     state.coverAssets = coverAssets.length ? coverAssets : state.coverAssets;
     state.coverAssetPath = state.coverAssets[0]?.path || "";
@@ -1021,6 +1086,9 @@ function renderSelectedNote() {
     $("#previewComments").innerHTML = "";
     $("#previewCoverText").textContent = "等待生成";
     $("#coverPromptBox").value = "";
+    $("#coverOutputPath").value = "";
+    $("#coverDownloadBtn").classList.add("hidden");
+    $("#coverDownloadBtn").removeAttribute("href");
     $("#coverThumb").removeAttribute("src");
     $("#coverThumb").classList.remove("visible");
     $("#coverThumbFallback").classList.remove("hidden");
@@ -1042,6 +1110,7 @@ function renderSelectedNote() {
   $("#editComments").placeholder = note.comments?.length ? "" : "生成文案后会补齐铺垫评论";
   $("#coverPromptBox").value = note.coverPrompt || "";
   $("#coverBriefBox").value = note.coverBrief || "";
+  $("#coverOutputPath").value = coverSourceText(note.coverImage);
   if (note.coverAssetPath) {
     state.coverAssetPath = note.coverAssetPath;
     $("#coverAssetStatus").textContent = "当前笔记已绑定产品图";
@@ -1064,12 +1133,16 @@ function renderSelectedNote() {
     note.coverStatus === "done" ? "已生成真实封面" : note.coverStatus === "failed" ? "封面生成失败" : "等待生成";
 
   if (note.coverImage) {
-    $("#previewCover").src = `${assetUrl(note.coverImage)}?t=${Date.now()}`;
+    const coverUrl = displayAssetUrl(note.coverImage);
+    $("#previewCover").src = coverUrl;
     $("#previewCover").classList.add("visible");
     $("#coverFallback").classList.add("hidden");
-    $("#coverThumb").src = `${assetUrl(note.coverImage)}?t=${Date.now()}`;
+    $("#coverThumb").src = coverUrl;
     $("#coverThumb").classList.add("visible");
     $("#coverThumbFallback").classList.add("hidden");
+    $("#coverDownloadBtn").href = assetUrl(note.coverImage);
+    $("#coverDownloadBtn").download = downloadNameForNote(note);
+    $("#coverDownloadBtn").classList.remove("hidden");
   } else {
     $("#previewCover").removeAttribute("src");
     $("#previewCover").classList.remove("visible");
@@ -1077,6 +1150,8 @@ function renderSelectedNote() {
     $("#coverThumb").removeAttribute("src");
     $("#coverThumb").classList.remove("visible");
     $("#coverThumbFallback").classList.remove("hidden");
+    $("#coverDownloadBtn").classList.add("hidden");
+    $("#coverDownloadBtn").removeAttribute("href");
   }
 }
 
@@ -1290,8 +1365,8 @@ async function generateCoversForAllNotes(button) {
           note,
           modelConfig: getModelConfig(),
           coverApiKey: $("#coverApiKey")?.value.trim() || "",
-          coverAssetPath: state.coverAssetPath || note.coverAssetPath || "",
-          productImageFolder: $("#productImageFolder")?.value.trim() || state.productImageFolder || "",
+          coverAssetPath: apiSafeAssetPath(state.coverAssetPath || note.coverAssetPath || ""),
+          productImageFolder: isLocalWorkbench() ? $("#productImageFolder")?.value.trim() || state.productImageFolder || "" : "",
           coverBrief: $("#coverBriefBox")?.value.trim() || note.coverBrief || "",
         }),
       });
@@ -1377,7 +1452,7 @@ async function saveCurrentCopy() {
   note.coverText = note.title;
   note.coverPrompt = $("#coverPromptBox").value.trim() || note.coverPrompt;
   note.coverBrief = $("#coverBriefBox").value.trim();
-  note.coverAssetPath = state.coverAssetPath || note.coverAssetPath || "";
+  note.coverAssetPath = apiSafeAssetPath(state.coverAssetPath || note.coverAssetPath || "");
   note.stage = note.body ? "copy" : "topic";
   const result = await api("/api/notes/update", {
     method: "POST",
@@ -1406,8 +1481,8 @@ async function generateSelectedCover(button) {
         note,
         modelConfig: getModelConfig(),
         coverApiKey: $("#coverApiKey")?.value.trim() || "",
-        coverAssetPath: state.coverAssetPath || note.coverAssetPath || "",
-        productImageFolder: $("#productImageFolder")?.value.trim() || state.productImageFolder || "",
+        coverAssetPath: apiSafeAssetPath(state.coverAssetPath || note.coverAssetPath || ""),
+        productImageFolder: isLocalWorkbench() ? $("#productImageFolder")?.value.trim() || state.productImageFolder || "" : "",
         coverBrief: $("#coverBriefBox").value.trim() || note.coverBrief || "",
       }),
     });
