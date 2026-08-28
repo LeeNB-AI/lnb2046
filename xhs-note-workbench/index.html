@@ -313,9 +313,19 @@
               </div>
               <p id="coverAssetStatus" class="field-status">未指定产品图文件夹</p>
               <label>
+                生成张数
+                <select id="coverCount">
+                  <option value="1">1 张</option>
+                  <option value="2">2 张</option>
+                  <option value="3">3 张</option>
+                  <option value="4">4 张</option>
+                </select>
+              </label>
+              <label>
                 封面组合要求
                 <textarea id="coverBriefBox" placeholder="例如：把产品图放中下方，标题大字靠上，整体干净高级，保留小红书封面冲击力"></textarea>
               </label>
+              <div id="coverVariantList" class="cover-variant-list"></div>
               <label>
                 封面模板说明
                 <textarea id="coverPromptBox" readonly></textarea>

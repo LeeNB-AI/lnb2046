@@ -1042,6 +1042,35 @@ select:focus {
   min-height: 208px;
 }
 
+.cover-variant-list {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin: 10px 0 12px;
+}
+
+.cover-variant-list:empty {
+  display: none;
+}
+
+.cover-variant-btn {
+  min-height: 34px;
+  padding: 7px 12px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: #fff;
+  color: var(--muted);
+  font-size: 13px;
+  font-weight: 850;
+  cursor: pointer;
+}
+
+.cover-variant-btn.active {
+  border-color: var(--red);
+  background: #fff0f1;
+  color: var(--red);
+}
+
 .preview-wrap {
   display: block;
 }
