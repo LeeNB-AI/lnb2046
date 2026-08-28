@@ -21,6 +21,7 @@ const state = {
   coverAssets: [],
   coverAssetPath: "",
   productImageFolder: "",
+  selectedCoverVariant: 0,
 };
 
 const $ = (selector) => document.querySelector(selector);
@@ -138,6 +139,7 @@ function coverSourceText(coverImage) {
   if (!coverImage) return "";
   if (/^data:/i.test(coverImage)) return "线上临时图片，可直接导出下载";
   if (/^https?:/i.test(coverImage)) return coverImage;
+  if (!coverImage.startsWith("/")) return coverImage;
   return assetUrl(coverImage);
 }
 
@@ -147,6 +149,16 @@ function downloadNameForNote(note) {
     .replace(/\s+/g, "-")
     .slice(0, 36);
   return `${base || "xhs-cover"}.png`;
+}
+
+function selectedCoverImage(note) {
+  const variants = Array.isArray(note?.coverVariants) ? note.coverVariants : [];
+  return variants[state.selectedCoverVariant]?.image || note?.coverImage || "";
+}
+
+function selectedCoverSource(note) {
+  const variants = Array.isArray(note?.coverVariants) ? note.coverVariants : [];
+  return variants[state.selectedCoverVariant]?.source || note?.coverImage || "";
 }
 
 function initApiConfigInputs() {
@@ -1081,6 +1093,7 @@ function renderNotesList() {
   $all("[data-note-index]").forEach((button) => {
     const selectNote = () => {
       state.selectedIndex = Number(button.dataset.noteIndex);
+      state.selectedCoverVariant = 0;
       renderNotesList();
       renderSelectedNote();
     };
@@ -1127,6 +1140,7 @@ function renderSelectedNote() {
     $("#previewComments").innerHTML = "";
     $("#previewCoverText").textContent = "等待生成";
     $("#coverPromptBox").value = "";
+    $("#coverVariantList").innerHTML = "";
     $("#coverOutputPath").value = "";
     $("#coverDownloadBtn").classList.add("hidden");
     $("#coverDownloadBtn").removeAttribute("href");
@@ -1151,7 +1165,9 @@ function renderSelectedNote() {
   $("#editComments").placeholder = note.comments?.length ? "" : "生成文案后会补齐铺垫评论";
   $("#coverPromptBox").value = note.coverPrompt || "";
   $("#coverBriefBox").value = note.coverBrief || "";
-  $("#coverOutputPath").value = coverSourceText(note.coverImage);
+  renderCoverVariants(note);
+  const activeCoverImage = selectedCoverImage(note);
+  $("#coverOutputPath").value = coverSourceText(selectedCoverSource(note) || activeCoverImage);
   if (note.coverAssetPath) {
     state.coverAssetPath = note.coverAssetPath;
     $("#coverAssetStatus").textContent = "当前笔记已绑定产品图";
@@ -1173,15 +1189,15 @@ function renderSelectedNote() {
   $("#coverStatus").textContent =
     note.coverStatus === "done" ? "已生成真实封面" : note.coverStatus === "failed" ? "封面生成失败" : "等待生成";
 
-  if (note.coverImage) {
-    const coverUrl = displayAssetUrl(note.coverImage);
+  if (activeCoverImage) {
+    const coverUrl = displayAssetUrl(activeCoverImage);
     $("#previewCover").src = coverUrl;
     $("#previewCover").classList.add("visible");
     $("#coverFallback").classList.add("hidden");
     $("#coverThumb").src = coverUrl;
     $("#coverThumb").classList.add("visible");
     $("#coverThumbFallback").classList.add("hidden");
-    $("#coverDownloadBtn").href = assetUrl(note.coverImage);
+    $("#coverDownloadBtn").href = assetUrl(activeCoverImage);
     $("#coverDownloadBtn").download = downloadNameForNote(note);
     $("#coverDownloadBtn").classList.remove("hidden");
   } else {
@@ -1194,6 +1210,174 @@ function renderSelectedNote() {
     $("#coverDownloadBtn").classList.add("hidden");
     $("#coverDownloadBtn").removeAttribute("href");
   }
+}
+
+function renderCoverVariants(note) {
+  const list = $("#coverVariantList");
+  if (!list) return;
+  const variants = Array.isArray(note.coverVariants) ? note.coverVariants : [];
+  if (!variants.length) {
+    list.innerHTML = "";
+    state.selectedCoverVariant = 0;
+    return;
+  }
+  state.selectedCoverVariant = Math.min(state.selectedCoverVariant || 0, variants.length - 1);
+  list.innerHTML = variants
+    .map(
+      (variant, index) =>
+        `<button class="cover-variant-btn ${index === state.selectedCoverVariant ? "active" : ""}" data-cover-variant="${index}" type="button">${escapeHtml(variant.label || `封面 ${index + 1}`)}</button>`,
+    )
+    .join("");
+  $all("[data-cover-variant]").forEach((button) => {
+    button.addEventListener("click", () => {
+      state.selectedCoverVariant = Number(button.dataset.coverVariant);
+      note.coverImage = variants[state.selectedCoverVariant]?.image || note.coverImage;
+      renderSelectedNote();
+    });
+  });
+}
+
+function coverHookLines(note, variantIndex = 0) {
+  const source = String(note.coverText || note.title || "封面草稿").replace(/[｜|]/g, " ").replace(/\s+/g, " ").trim();
+  const clean = source
+    .replace(/女生别不好意思，?/g, "")
+    .replace(/真的很正常/g, "很正常")
+    .slice(0, 28);
+  const presets = [
+    ["同居久了像", "左手摸右手？"],
+    ["小心机准备", "关系升温感"],
+    ["别再硬聊了", "试试这一步"],
+    ["舒服自然", "才是真的会"],
+  ];
+  if (clean.length < 8) return presets[variantIndex % presets.length];
+  const first = clean.slice(0, Math.min(9, clean.length));
+  const second = clean.slice(first.length, first.length + 10) || presets[variantIndex % presets.length][1];
+  return [first, second];
+}
+
+function drawCoverText(ctx, text, x, y, size, color, accent, rotate = 0) {
+  ctx.save();
+  ctx.translate(x, y);
+  ctx.rotate((rotate * Math.PI) / 180);
+  ctx.font = `900 ${size}px "Arial Rounded MT Bold", "PingFang SC", "Microsoft YaHei", sans-serif`;
+  ctx.lineJoin = "round";
+  ctx.strokeStyle = "rgba(255,255,255,0.96)";
+  ctx.lineWidth = Math.max(10, size * 0.16);
+  ctx.strokeText(text, 0, 0);
+  ctx.fillStyle = color;
+  ctx.fillText(text, 0, 0);
+  ctx.strokeStyle = accent;
+  ctx.lineWidth = Math.max(3, size * 0.04);
+  ctx.strokeText(text, 0, 0);
+  ctx.restore();
+}
+
+function roundRectPath(ctx, x, y, width, height, radius) {
+  const r = Math.min(radius, width / 2, height / 2);
+  ctx.beginPath();
+  ctx.moveTo(x + r, y);
+  ctx.arcTo(x + width, y, x + width, y + height, r);
+  ctx.arcTo(x + width, y + height, x, y + height, r);
+  ctx.arcTo(x, y + height, x, y, r);
+  ctx.arcTo(x, y, x + width, y, r);
+  ctx.closePath();
+}
+
+async function composeCoverFromAsset({ note, asset, variantIndex = 0 }) {
+  const image = await loadImageForResize(asset.path);
+  const canvas = document.createElement("canvas");
+  canvas.width = 1024;
+  canvas.height = 1536;
+  const ctx = canvas.getContext("2d");
+  const palettes = [
+    { bg: "#fff4ea", ink: "#101828", accent: "#ff4d6d", blue: "#0b2f8a" },
+    { bg: "#eaf8f5", ink: "#1f2937", accent: "#ff7a1a", blue: "#005f73" },
+    { bg: "#fff2f4", ink: "#151515", accent: "#ef3054", blue: "#2f3a8f" },
+    { bg: "#f7f0ff", ink: "#20152f", accent: "#00a896", blue: "#4b3fce" },
+  ];
+  const palette = palettes[variantIndex % palettes.length];
+  ctx.fillStyle = palette.bg;
+  ctx.fillRect(0, 0, canvas.width, canvas.height);
+
+  const imageRatio = image.naturalWidth / image.naturalHeight;
+  const targetRatio = canvas.width / canvas.height;
+  let sx = 0;
+  let sy = 0;
+  let sw = image.naturalWidth;
+  let sh = image.naturalHeight;
+  if (imageRatio > targetRatio) {
+    sw = image.naturalHeight * targetRatio;
+    sx = (image.naturalWidth - sw) / 2;
+  } else {
+    sh = image.naturalWidth / targetRatio;
+    sy = Math.max(0, (image.naturalHeight - sh) * 0.54);
+  }
+  ctx.drawImage(image, sx, sy, sw, sh, 0, 0, canvas.width, canvas.height);
+  const gradient = ctx.createLinearGradient(0, 0, 0, 820);
+  gradient.addColorStop(0, "rgba(255,255,255,0.90)");
+  gradient.addColorStop(0.44, "rgba(255,255,255,0.58)");
+  gradient.addColorStop(1, "rgba(255,255,255,0.06)");
+  ctx.fillStyle = gradient;
+  ctx.fillRect(0, 0, canvas.width, 900);
+
+  ctx.fillStyle = "rgba(255,255,255,0.88)";
+  roundRectPath(ctx, 70, 84, 230, 66, 33);
+  ctx.fill();
+  ctx.fillStyle = palette.accent;
+  ctx.font = '900 30px "PingFang SC", "Microsoft YaHei", sans-serif';
+  ctx.fillText("小红书感封面", 98, 128);
+
+  const [line1, line2] = coverHookLines(note, variantIndex);
+  drawCoverText(ctx, line1, 106, 330, 86, palette.ink, "rgba(255,255,255,0.95)", -1.5);
+  drawCoverText(ctx, line2, 106, 462, 92, palette.blue, palette.accent, -2);
+
+  ctx.fillStyle = palette.accent;
+  ctx.font = '900 64px "Arial Rounded MT Bold", "PingFang SC", sans-serif';
+  ctx.fillText(variantIndex % 2 ? "!" : "?", 850, 462);
+  ctx.font = '900 48px "PingFang SC", "Microsoft YaHei", sans-serif';
+  ctx.fillText(variantIndex % 2 ? "真的会" : "试试看", 118, 610);
+  ctx.fillStyle = palette.blue;
+  ctx.fillText(variantIndex % 2 ? "轻松一点" : "找回感觉", 328, 610);
+  ctx.fillStyle = "#ffbf1f";
+  ctx.font = "900 62px Arial, sans-serif";
+  ctx.fillText("⚡", 650, 612);
+
+  ctx.strokeStyle = palette.ink;
+  ctx.lineWidth = 5;
+  ctx.beginPath();
+  ctx.moveTo(118, 536);
+  ctx.lineTo(250, 536);
+  ctx.stroke();
+
+  const brief = String($("#coverBriefBox")?.value || note.coverBrief || "").trim();
+  if (brief) {
+    ctx.fillStyle = "rgba(255,255,255,0.86)";
+    roundRectPath(ctx, 76, 1320, 872, 92, 28);
+    ctx.fill();
+    ctx.fillStyle = "rgba(31,41,55,0.78)";
+    ctx.font = '700 28px "PingFang SC", "Microsoft YaHei", sans-serif';
+    ctx.fillText(brief.slice(0, 28), 116, 1377);
+  }
+
+  return canvas.toDataURL("image/png");
+}
+
+async function generateClientMaterialCovers(note, count) {
+  const assets = state.coverAssets.filter((asset) => asset?.path && /^data:image\//i.test(asset.path));
+  if (!assets.length) return null;
+  const variants = [];
+  for (let index = 0; index < count; index += 1) {
+    const asset = assets[(state.selectedIndex + index) % assets.length];
+    const image = await composeCoverFromAsset({ note, asset, variantIndex: index });
+    variants.push({
+      label: `素材封面 ${index + 1}`,
+      image,
+      source: `浏览器合成：${asset.name || "产品图"}`,
+      assetName: asset.name || "",
+      createdAt: new Date().toISOString(),
+    });
+  }
+  return variants;
 }
 
 function qualitySummaryText(summary) {
@@ -1400,24 +1584,36 @@ async function generateCoversForAllNotes(button) {
     button.textContent = `封面 ${index + 1}/${state.notes.length}`;
     $("#coverStatus").textContent = `正在生成第 ${index + 1} 张封面`;
     try {
-      const result = await api("/api/covers/generate", {
-        method: "POST",
-        body: JSON.stringify({
-          note,
-          modelConfig: modelConfigForRequest(),
-          coverApiKey: visibleApiKey("cover"),
-          coverAssetPath: apiSafeAssetPath(state.coverAssetPath || note.coverAssetPath || ""),
-          productImageFolder: isLocalWorkbench() ? $("#productImageFolder")?.value.trim() || state.productImageFolder || "" : "",
+      const materialVariants = await generateClientMaterialCovers(note, 1);
+      if (materialVariants?.length) {
+        state.notes[index] = {
+          ...state.notes[index],
+          coverImage: materialVariants[0].image,
+          coverVariants: materialVariants,
+          coverStatus: "done",
+          coverAssetPath: materialVariants[0].source,
           coverBrief: $("#coverBriefBox")?.value.trim() || note.coverBrief || "",
-        }),
-      });
-      state.notes[index] = {
-        ...state.notes[index],
-        coverImage: result.coverImage,
-        coverStatus: "done",
-        coverAssetPath: result.coverAssetPath || state.coverAssetPath || note.coverAssetPath || "",
-        coverBrief: $("#coverBriefBox")?.value.trim() || note.coverBrief || "",
-      };
+        };
+      } else {
+        const result = await api("/api/covers/generate", {
+          method: "POST",
+          body: JSON.stringify({
+            note,
+            modelConfig: modelConfigForRequest(),
+            coverApiKey: visibleApiKey("cover"),
+            coverAssetPath: apiSafeAssetPath(state.coverAssetPath || note.coverAssetPath || ""),
+            productImageFolder: isLocalWorkbench() ? $("#productImageFolder")?.value.trim() || state.productImageFolder || "" : "",
+            coverBrief: $("#coverBriefBox")?.value.trim() || note.coverBrief || "",
+          }),
+        });
+        state.notes[index] = {
+          ...state.notes[index],
+          coverImage: result.coverImage,
+          coverStatus: "done",
+          coverAssetPath: result.coverAssetPath || state.coverAssetPath || note.coverAssetPath || "",
+          coverBrief: $("#coverBriefBox")?.value.trim() || note.coverBrief || "",
+        };
+      }
     } catch (error) {
       state.notes[index] = { ...state.notes[index], coverStatus: "failed", coverError: error.message };
     }
@@ -1512,26 +1708,48 @@ async function saveCurrentCopy() {
 async function generateSelectedCover(button) {
   const note = state.notes[state.selectedIndex];
   if (!note) return;
+  const count = Math.max(1, Math.min(4, Number($("#coverCount")?.value || 1)));
   button.disabled = true;
   button.textContent = "生成中...";
-  $("#coverStatus").textContent = "正在生成封面";
+  $("#coverStatus").textContent = `正在生成 ${count} 张封面`;
   try {
-    const result = await api("/api/covers/generate", {
-      method: "POST",
-      body: JSON.stringify({
-        note,
-        modelConfig: modelConfigForRequest(),
-        coverApiKey: visibleApiKey("cover"),
-        coverAssetPath: apiSafeAssetPath(state.coverAssetPath || note.coverAssetPath || ""),
-        productImageFolder: isLocalWorkbench() ? $("#productImageFolder")?.value.trim() || state.productImageFolder || "" : "",
-        coverBrief: $("#coverBriefBox").value.trim() || note.coverBrief || "",
-      }),
-    });
-    note.coverImage = result.coverImage;
+    const materialVariants = await generateClientMaterialCovers(note, count);
+    if (materialVariants?.length) {
+      note.coverVariants = materialVariants;
+      state.selectedCoverVariant = 0;
+      note.coverImage = materialVariants[0].image;
+      note.coverAssetPath = materialVariants[0].source;
+    } else {
+      const variants = [];
+      for (let index = 0; index < count; index += 1) {
+        $("#coverStatus").textContent = `正在生成第 ${index + 1}/${count} 张封面`;
+        const result = await api("/api/covers/generate", {
+          method: "POST",
+          body: JSON.stringify({
+            note,
+            modelConfig: modelConfigForRequest(),
+            coverApiKey: visibleApiKey("cover"),
+            coverAssetPath: apiSafeAssetPath(state.coverAssetPath || note.coverAssetPath || ""),
+            productImageFolder: isLocalWorkbench() ? $("#productImageFolder")?.value.trim() || state.productImageFolder || "" : "",
+            coverBrief: $("#coverBriefBox").value.trim() || note.coverBrief || "",
+          }),
+        });
+        variants.push({
+          label: `AI 封面 ${index + 1}`,
+          image: result.coverImage,
+          source: result.coverImage,
+          createdAt: new Date().toISOString(),
+        });
+      }
+      note.coverVariants = variants;
+      state.selectedCoverVariant = 0;
+      note.coverImage = variants[0]?.image || note.coverImage;
+      note.coverAssetPath = variants[0]?.source || note.coverAssetPath || "";
+    }
     note.coverStatus = "done";
-    note.coverAssetPath = result.coverAssetPath || state.coverAssetPath || note.coverAssetPath || "";
     state.coverAssetPath = note.coverAssetPath;
     note.coverBrief = $("#coverBriefBox").value.trim() || note.coverBrief || "";
+    $("#coverStatus").textContent = `已生成 ${note.coverVariants?.length || 1} 张封面`;
     renderSelectedNote();
   } catch (error) {
     note.coverStatus = "failed";
