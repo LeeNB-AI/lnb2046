@@ -26,6 +26,8 @@ const state = {
 const $ = (selector) => document.querySelector(selector);
 const $all = (selector) => Array.from(document.querySelectorAll(selector));
 const API_BASE_KEY = "xhsWorkbenchApiBaseUrl";
+const TEXT_API_KEY_STORAGE = "xhsWorkbenchTextApiKey";
+const COVER_API_KEY_STORAGE = "xhsWorkbenchCoverApiKey";
 const CODEX_IMAGEGEN_PATH = "/Users/libucuo/.codex/skills/.system/imagegen/scripts/image_gen.py";
 const CODEX_IMAGEGEN_PYTHON = "/Users/libucuo/WorkBuddy/2026-08-06-20-04-17/image-workflow/venv/bin/python";
 
@@ -39,6 +41,29 @@ function splitList(value) {
     .split(/[,，、\n]/)
     .map((item) => item.trim())
     .filter(Boolean);
+}
+
+function maskClientSecret(value) {
+  const text = String(value || "");
+  if (!text) return "";
+  return text.length <= 10 ? "已保存" : `${text.slice(0, 6)}...${text.slice(-4)}`;
+}
+
+function storedApiKey(type) {
+  return localStorage.getItem(type === "cover" ? COVER_API_KEY_STORAGE : TEXT_API_KEY_STORAGE) || "";
+}
+
+function visibleApiKey(type) {
+  const input = type === "cover" ? $("#coverApiKey") : $("#textApiKey");
+  return input?.value.trim() || storedApiKey(type);
+}
+
+function modelConfigForRequest() {
+  return {
+    ...getModelConfig(),
+    textApiKey: visibleApiKey("text"),
+    coverApiKey: visibleApiKey("cover"),
+  };
 }
 
 async function api(path, options = {}) {
@@ -194,6 +219,8 @@ function setModelConfig(config = {}) {
   $("#imageModel").value = isLegacyCover ? "gpt-image-1" : config.imageModel || "gpt-image-1";
   $("#imageCliPath").value = config.imageCliPath || CODEX_IMAGEGEN_PATH;
   $("#pythonPath").value = config.pythonPath || (navigator.platform.toLowerCase().includes("win") ? "python" : CODEX_IMAGEGEN_PYTHON);
+  if ($("#textApiKey")) $("#textApiKey").value = storedApiKey("text");
+  if ($("#coverApiKey")) $("#coverApiKey").value = storedApiKey("cover");
   if ($("#productImageFolder")) $("#productImageFolder").value = config.productImageFolder || "";
   state.productImageFolder = config.productImageFolder || "";
   $("#xhsCliPath").value = config.xhsCliPath || "/Users/libucuo/.local/bin/xhs";
@@ -248,15 +275,19 @@ async function loadStatus() {
   try {
     await loadApiSettings();
     const status = await api("/api/status");
+    const localTextKey = storedApiKey("text");
+    const localCoverKey = storedApiKey("cover");
+    const textAvailable = status.textgen.available || Boolean(localTextKey);
+    const coverAvailable = status.imagegen.available || Boolean(localCoverKey);
     setDot($("#xhsDot"), status.xhs.available && status.xhs.loggedIn);
-    setDot($("#textDot"), status.textgen.available);
-    setDot($("#imageDot"), status.imagegen.available);
+    setDot($("#textDot"), textAvailable);
+    setDot($("#imageDot"), coverAvailable);
     $("#xhsStatus").textContent = status.xhs.message;
-    $("#textStatus").textContent = status.textgen.message;
-    $("#imageStatus").textContent = status.imagegen.message;
+    $("#textStatus").textContent = localTextKey ? "文案 Key 已保存在当前浏览器" : status.textgen.message;
+    $("#imageStatus").textContent = localCoverKey ? "封面 Key 已保存在当前浏览器" : status.imagegen.message;
     $("#xhsConfigStatus").textContent = status.xhs.message || "线上版请粘贴导入热点";
-    $("#textConfigStatus").textContent = status.textgen.message;
-    $("#coverConfigStatus").textContent = status.imagegen.message;
+    $("#textConfigStatus").textContent = localTextKey ? "浏览器已保存文案 Key，可生成" : status.textgen.message;
+    $("#coverConfigStatus").textContent = localCoverKey ? "浏览器已保存封面 Key，可生成" : status.imagegen.message;
   } catch (error) {
     $("#xhsStatus").textContent = `状态检查失败：${error.message}`;
     $("#textStatus").textContent = "状态检查失败";
@@ -270,8 +301,18 @@ async function loadStatus() {
 async function loadApiSettings() {
   try {
     const settings = await api("/api/settings");
-    const textState = settings.textApiKeySet ? `文案 Key：${settings.textApiKeyMasked || "已配置"}` : "文案 Key 未配置";
-    const coverState = settings.coverApiKeySet ? `封面 Key：${settings.coverApiKeyMasked || "已配置"}` : "封面 Key 未配置";
+    const localTextKey = storedApiKey("text");
+    const localCoverKey = storedApiKey("cover");
+    const textState = localTextKey
+      ? `文案 Key：浏览器已保存 ${maskClientSecret(localTextKey)}`
+      : settings.textApiKeySet
+        ? `文案 Key：后台已配置 ${settings.textApiKeyMasked || ""}`
+        : "文案 Key 未配置";
+    const coverState = localCoverKey
+      ? `封面 Key：浏览器已保存 ${maskClientSecret(localCoverKey)}`
+      : settings.coverApiKeySet
+        ? `封面 Key：后台已配置 ${settings.coverApiKeyMasked || ""}`
+        : "封面 Key 未配置";
     $("#apiKeyStatus").textContent = `${textState}｜${coverState}`;
   } catch (error) {
     $("#apiKeyStatus").textContent = `接口不可用：${error.message}`;
@@ -287,6 +328,8 @@ async function saveScopedConfig(scope = "all") {
   localStorage.setItem(API_BASE_KEY, apiBaseUrl);
   const textApiKey = scope === "all" || scope === "text" ? $("#textApiKey").value.trim() : "";
   const coverApiKey = scope === "all" || scope === "cover" ? $("#coverApiKey").value.trim() : "";
+  if (textApiKey) localStorage.setItem(TEXT_API_KEY_STORAGE, textApiKey);
+  if (coverApiKey) localStorage.setItem(COVER_API_KEY_STORAGE, coverApiKey);
   const payload = {
     modelConfig: getModelConfig(),
     ...(textApiKey ? { textApiKey } : {}),
@@ -296,18 +339,16 @@ async function saveScopedConfig(scope = "all") {
     method: "POST",
     body: JSON.stringify(payload),
   });
-  if (scope === "all" || scope === "text") $("#textApiKey").value = "";
-  if (scope === "all" || scope === "cover") $("#coverApiKey").value = "";
-  $("#apiKeyStatus").textContent = "已保存服务配置";
-  if (scope === "text") $("#textConfigStatus").textContent = "已保存文案 API 设置";
-  if (scope === "cover") $("#coverConfigStatus").textContent = "已保存封面 API 设置";
+  $("#apiKeyStatus").textContent = "已保存模型设置和 API Key";
+  if (scope === "text") $("#textConfigStatus").textContent = textApiKey || storedApiKey("text") ? "已保存文案 API Key" : "已保存文案设置，未填写 Key";
+  if (scope === "cover") $("#coverConfigStatus").textContent = coverApiKey || storedApiKey("cover") ? "已保存封面 API Key" : "已保存封面设置，未填写 Key";
   await loadStatus();
 }
 
 async function fetchModelList(type, button) {
   const isText = type === "text";
   const apiBaseUrl = isText ? $("#textApiBaseUrl").value.trim() : $("#coverApiBaseUrl").value.trim();
-  const apiKey = isText ? $("#textApiKey").value.trim() : $("#coverApiKey").value.trim();
+  const apiKey = visibleApiKey(type);
   const status = isText ? $("#textConfigStatus") : $("#coverConfigStatus");
   if (!apiBaseUrl) {
     status.textContent = "请先填写 API 地址";
@@ -947,7 +988,7 @@ async function previewKnowledgeImport() {
       body: JSON.stringify({
         rawText,
         product: getProductInput(),
-        modelConfig: getModelConfig(),
+        modelConfig: modelConfigForRequest(),
       }),
     });
     $("#knowledgeImportStatus").textContent = state.knowledgeImportDraft.usedAi
@@ -1318,7 +1359,7 @@ function generationPayload() {
     hotspots: state.hotspots,
     knowledgeScope: state.knowledgeScope,
     tone: state.tone,
-    modelConfig: getModelConfig(),
+    modelConfig: modelConfigForRequest(),
     activeRuleId: state.activeRuleId,
   };
 }
@@ -1363,8 +1404,8 @@ async function generateCoversForAllNotes(button) {
         method: "POST",
         body: JSON.stringify({
           note,
-          modelConfig: getModelConfig(),
-          coverApiKey: $("#coverApiKey")?.value.trim() || "",
+          modelConfig: modelConfigForRequest(),
+          coverApiKey: visibleApiKey("cover"),
           coverAssetPath: apiSafeAssetPath(state.coverAssetPath || note.coverAssetPath || ""),
           productImageFolder: isLocalWorkbench() ? $("#productImageFolder")?.value.trim() || state.productImageFolder || "" : "",
           coverBrief: $("#coverBriefBox")?.value.trim() || note.coverBrief || "",
@@ -1479,8 +1520,8 @@ async function generateSelectedCover(button) {
       method: "POST",
       body: JSON.stringify({
         note,
-        modelConfig: getModelConfig(),
-        coverApiKey: $("#coverApiKey")?.value.trim() || "",
+        modelConfig: modelConfigForRequest(),
+        coverApiKey: visibleApiKey("cover"),
         coverAssetPath: apiSafeAssetPath(state.coverAssetPath || note.coverAssetPath || ""),
         productImageFolder: isLocalWorkbench() ? $("#productImageFolder")?.value.trim() || state.productImageFolder || "" : "",
         coverBrief: $("#coverBriefBox").value.trim() || note.coverBrief || "",

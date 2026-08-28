@@ -620,7 +620,7 @@ async function listModels(body = {}) {
 }
 
 async function generateNotesWithTextApi({ modelConfig, product, hotspot, knowledge, notes, copyMode = "full", tone = "mixed" }) {
-  const apiKey = envTextKey();
+  const apiKey = modelConfig?.textApiKey || envTextKey();
   if (!apiKey || !["cloud", "cloud-api"].includes(modelConfig.textMode)) return notes;
   const task =
     copyMode === "topic"
