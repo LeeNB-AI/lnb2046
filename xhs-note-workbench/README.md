@@ -22,7 +22,9 @@ Windows：双击 start-workbench-windows.bat
 macOS：双击 install-xhs-cli.command
 Windows：双击 install-xhs-cli-windows.bat
 
-安装助手会安装 uv、安装 xiaohongshu-cli，并启动本地工作台。线上网页不能静默安装电脑程序，所以线上按钮会下载这个本地助手。
+安装助手会安装 uv、安装 xiaohongshu-cli、自动测试 xhs 状态；如果检测到未登录或测试失败，会自动进入 `xhs login --qrcode`，让用户扫码登录，然后启动本地工作台。建议使用不常用的小红书账号进行测试。
+
+线上网页不能静默安装电脑程序，所以线上按钮会下载这个本地助手。
 ```
 
 打开：

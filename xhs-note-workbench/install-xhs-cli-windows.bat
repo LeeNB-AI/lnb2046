@@ -3,7 +3,10 @@ setlocal
 cd /d "%~dp0"
 
 echo XHS local helper
-echo This script installs uv if needed, installs xiaohongshu-cli, then starts the local workbench.
+echo This script installs uv if needed, installs xiaohongshu-cli, tests it, starts QR login when needed, then starts the local workbench.
+echo.
+echo Recommendation: use a Xiaohongshu account that is not your main daily account.
+echo.
 
 where uv >nul 2>nul
 if errorlevel 1 (
@@ -19,6 +22,19 @@ if errorlevel 1 goto failed
 echo Checking xhs...
 xhs --help >nul
 if errorlevel 1 goto failed
+
+echo Testing Xiaohongshu CLI login status...
+xhs status --json
+if errorlevel 1 (
+  echo.
+  echo XHS account is not logged in or status check failed.
+  echo Opening QR login now. Please scan with the Xiaohongshu app.
+  echo Recommendation: use a Xiaohongshu account that is not your main daily account.
+  echo.
+  xhs login --qrcode
+  echo Testing login status again...
+  xhs status --json
+)
 
 where node >nul 2>nul
 if errorlevel 1 (
