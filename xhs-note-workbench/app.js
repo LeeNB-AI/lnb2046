@@ -130,6 +130,19 @@ function isLocalWorkbench() {
   return window.location.protocol === "file:" || /^https?:\/\/(127\.0\.0\.1|localhost)(:\d+)?$/i.test(base);
 }
 
+function onlineXhsCliMessage(action = "操作") {
+  return `线上版不能直接${action}你电脑里的小红书 CLI。请在本地工作台运行 CLI 后，把导出的 JSON/TXT 粘贴到第 2 步“选题素材导入”。`;
+}
+
+function showOnlineXhsCliHint(action = "操作") {
+  const message = onlineXhsCliMessage(action);
+  $("#xhsConfigStatus").textContent = message;
+  $("#xhsStatus").textContent = "线上版请使用热点粘贴导入";
+  $("#hotspotTime").textContent = "线上版请粘贴本地 CLI 导出的热点素材";
+  setDot($("#xhsDot"), false);
+  return message;
+}
+
 function apiSafeAssetPath(path) {
   if (!path || /^data:/i.test(path)) return "";
   return path;
@@ -1496,6 +1509,10 @@ async function fetchHotspots() {
 
 async function fetchXhsHotspots() {
   const button = $("#fetchXhsCliBtn");
+  if (!isLocalWorkbench()) {
+    showOnlineXhsCliHint("拉取或登录");
+    return;
+  }
   button.disabled = true;
   button.textContent = "拉取中...";
   $("#xhsConfigStatus").textContent = "正在调用本地 xhs CLI";
@@ -1895,6 +1912,10 @@ function bindEvents() {
   $("#fetchXhsCliBtn").addEventListener("click", fetchXhsHotspots);
   $("#testXhsCliBtn").addEventListener("click", async () => {
     const button = $("#testXhsCliBtn");
+    if (!isLocalWorkbench()) {
+      showOnlineXhsCliHint("测试");
+      return;
+    }
     button.disabled = true;
     button.textContent = "测试中...";
     try {
@@ -2018,6 +2039,10 @@ function bindEvents() {
   });
   $("#installXhsCliBtn")?.addEventListener("click", async () => {
     const button = $("#installXhsCliBtn");
+    if (!isLocalWorkbench()) {
+      showOnlineXhsCliHint("安装或检测");
+      return;
+    }
     button.disabled = true;
     button.textContent = "检测中...";
     try {

@@ -911,7 +911,7 @@ async function route(pathname, method, body) {
   if (method === "POST" && pathname === "/api/models/list") return listModels(body);
   if (method === "POST" && pathname === "/api/hotspots/import") return importHotspots(body);
   if (method === "POST" && pathname === "/api/xhs/hotspots") throw new Error("线上版不运行 xhs CLI。请在本地运行后，把 JSON 或文本粘贴到第 2 步导入。");
-  if (method === "POST" && pathname === "/api/xhs/install") throw new Error("线上网页不能直接安装或登录你电脑里的小红书 CLI。请在本地工作台运行安装/检测，或后续做桌面安装包。");
+  if (method === "POST" && pathname === "/api/xhs/install") throw new Error("线上版不能直接安装、检测或登录你电脑里的小红书 CLI。请在本地工作台运行 CLI 后，把导出的 JSON/TXT 粘贴到第 2 步“选题素材导入”。");
   if (method === "POST" && pathname === "/api/notes/generate") return makeNotes(body, "full");
   if (method === "POST" && pathname === "/api/notes/generate-topics") return makeNotes(body, "topic");
   if (method === "POST" && pathname === "/api/notes/generate-copy") return makeCopyForNote(body);
