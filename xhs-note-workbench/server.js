@@ -179,6 +179,16 @@ function execFileJson(command, args = [], timeout = 20000) {
   });
 }
 
+function commandExists(command, timeout = 5000) {
+  return new Promise((resolve) => {
+    const args = process.platform === "win32" ? ["/c", "where", command] : ["-lc", `command -v ${command}`];
+    const shellCommand = process.platform === "win32" ? "cmd.exe" : "/bin/sh";
+    execFile(shellCommand, args, { timeout, maxBuffer: 1024 * 128 }, (error, stdout) => {
+      resolve(error ? "" : String(stdout || "").trim().split(/\r?\n/)[0]);
+    });
+  });
+}
+
 async function fetchModelsFromApi({ type, apiBaseUrl, apiKey }) {
   const base = String(apiBaseUrl || "").trim().replace(/\/$/, "");
   if (!base) throw new Error("请先填写 API 地址");
@@ -592,33 +602,54 @@ async function fetchHotspots(product) {
 
 async function installOrDetectXhsCli(payload = {}) {
   const state = readState();
-  const candidates = unique(
-    [
-      payload.xhsCliPath,
-      state.modelConfig?.xhsCliPath,
-      process.env.XHS_BIN,
-      "/Users/libucuo/.local/bin/xhs",
-      "/opt/homebrew/bin/xhs",
-      "/usr/local/bin/xhs",
-      "xhs",
-    ].filter(Boolean),
-    12,
-  );
-  for (const candidate of candidates) {
+  const xhsCandidates = () =>
+    unique(
+      [
+        payload.xhsCliPath,
+        state.modelConfig?.xhsCliPath,
+        process.env.XHS_BIN,
+        process.platform === "win32" ? path.join(process.env.USERPROFILE || "", ".local", "bin", "xhs.exe") : "",
+        path.join(process.env.HOME || "", ".local", "bin", "xhs"),
+        "/Users/libucuo/.local/bin/xhs",
+        "/opt/homebrew/bin/xhs",
+        "/usr/local/bin/xhs",
+        "xhs",
+      ].filter(Boolean),
+      12,
+    );
+  const detectXhs = async () => {
+    for (const candidate of xhsCandidates()) {
+      try {
+        await execFileJson(candidate, ["--help"], 8000);
+        state.modelConfig = { ...state.modelConfig, xhsCliPath: candidate };
+        writeState(state);
+        return {
+          available: true,
+          xhsCliPath: candidate,
+          message: `已检测到小红书 CLI：${candidate}。如果未登录，请在终端运行登录命令后扫码/输入账号。`,
+        };
+      } catch {
+        // Try the next known location.
+      }
+    }
+    return null;
+  };
+
+  const detected = await detectXhs();
+  if (detected) return detected;
+
+  const uvCommand = (await commandExists("uv")) || (await commandExists(path.join(process.env.HOME || "", ".local", "bin", "uv")));
+  if (uvCommand) {
     try {
-      await execFileJson(candidate, ["--help"], 8000);
-      state.modelConfig = { ...state.modelConfig, xhsCliPath: candidate };
-      writeState(state);
-      return {
-        available: true,
-        xhsCliPath: candidate,
-        message: `已检测到小红书 CLI：${candidate}。如果未登录，请在终端运行登录命令后扫码/输入账号。`,
-      };
-    } catch {
-      // Try the next known location.
+      await execFileJson(uvCommand, ["tool", "install", "xiaohongshu-cli", "--force"], 120000);
+      const installed = await detectXhs();
+      if (installed) return { ...installed, message: `已自动安装并检测到小红书 CLI：${installed.xhsCliPath}。如果未登录，请在终端运行登录命令后扫码/输入账号。` };
+    } catch (error) {
+      throw new Error(`已找到 uv，但自动安装 xiaohongshu-cli 失败：${error.message}`);
     }
   }
-  throw new Error("没有检测到 xhs CLI。线上网页不能直接安装电脑程序；本地版可把 CLI 放进 vendor/xhs 后再做一键安装脚本。");
+
+  throw new Error("没有检测到 xhs CLI，也没有检测到 uv。请先运行本地安装助手安装 uv 和 xiaohongshu-cli。");
 }
 
 async function resetTopicLibrary(product) {

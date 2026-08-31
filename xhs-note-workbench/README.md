@@ -16,6 +16,13 @@ npm run dev:web
 ```text
 macOS：双击 start-workbench.command
 Windows：双击 start-workbench-windows.bat
+
+如果新电脑还没有小红书 CLI，可以先运行安装助手：
+
+macOS：双击 install-xhs-cli.command
+Windows：双击 install-xhs-cli-windows.bat
+
+安装助手会安装 uv、安装 xiaohongshu-cli，并启动本地工作台。线上网页不能静默安装电脑程序，所以线上按钮会下载这个本地助手。
 ```
 
 打开：
@@ -44,7 +51,7 @@ SUPABASE_STORAGE_BUCKET
 
 ## 热点素材
 
-线上版不在服务器运行小红书 CLI。先在本地运行 xhs CLI 获取热点，再把 JSON/TXT 粘贴到第 2 步“选题素材库”导入。
+线上版不在服务器运行小红书 CLI，也不能直接登录或安装你电脑里的 CLI。先在本地运行 xhs CLI 获取热点，再把 JSON/TXT 粘贴到第 2 步“选题素材库”导入。
 
 ## 知识库 AI 分类
 
