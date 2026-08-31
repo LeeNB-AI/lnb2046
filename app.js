@@ -143,6 +143,23 @@ function showOnlineXhsCliHint(action = "操作") {
   return message;
 }
 
+function downloadXhsLocalHelper() {
+  const isWindows = /win/i.test(navigator.platform || navigator.userAgent || "");
+  const fileName = isWindows ? "install-xhs-cli-windows.bat" : "install-xhs-cli.command";
+  const link = document.createElement("a");
+  link.href = `./${fileName}`;
+  link.download = fileName;
+  document.body.appendChild(link);
+  link.click();
+  link.remove();
+  const message = isWindows
+    ? "已下载 Windows 本地安装助手。请双击运行，它会安装 uv、安装 xhs CLI，并启动本地工作台。网页不能静默执行电脑安装。"
+    : "已下载 macOS 本地安装助手。请双击运行，它会安装 uv、安装 xhs CLI，并启动本地工作台。网页不能静默执行电脑安装。";
+  $("#xhsConfigStatus").textContent = message;
+  $("#xhsStatus").textContent = "已提供本地安装助手";
+  $("#hotspotTime").textContent = "安装助手运行成功后，可在本地工作台拉取热点";
+}
+
 function apiSafeAssetPath(path) {
   if (!path || /^data:/i.test(path)) return "";
   return path;
@@ -294,6 +311,8 @@ function updateModelFieldVisibility() {
   $all("[data-cover-field]").forEach((field) => {
     field.classList.toggle("hidden", !field.dataset.coverField.split(/\s+/).includes(coverMode));
   });
+  const installButton = $("#installXhsCliBtn");
+  if (installButton) installButton.textContent = isLocalWorkbench() ? "安装/检测 CLI" : "下载本地助手";
 }
 
 async function loadStatus() {
@@ -2040,7 +2059,7 @@ function bindEvents() {
   $("#installXhsCliBtn")?.addEventListener("click", async () => {
     const button = $("#installXhsCliBtn");
     if (!isLocalWorkbench()) {
-      showOnlineXhsCliHint("安装或检测");
+      downloadXhsLocalHelper();
       return;
     }
     button.disabled = true;
