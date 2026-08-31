@@ -496,7 +496,7 @@
               </select>
             </label>
             <div class="api-config-actions">
-              <button id="installXhsCliBtn" class="secondary-btn" type="button">安装 / 登录</button>
+              <button id="installXhsCliBtn" class="secondary-btn" type="button">下载本地助手</button>
               <button id="testXhsCliBtn" class="secondary-btn" type="button">测试连接与登录</button>
               <button id="fetchXhsCliBtn" class="secondary-btn" type="button">拉取热点</button>
               <button id="saveXhsConfigBtn" class="secondary-btn" type="button">保存 CLI 设置</button>
@@ -566,39 +566,6 @@
       </aside>
     </div>
 
-    <div id="xhsInstallModal" class="modal-backdrop hidden" role="dialog" aria-modal="true" aria-labelledby="xhsInstallTitle">
-      <div class="modal-card">
-        <div class="modal-heading">
-          <div>
-            <h3 id="xhsInstallTitle">小红书 CLI 本地安装</h3>
-            <p>线上网页不能静默运行电脑程序。复制下面命令到终端运行后，就能安装、检测并启动本地工作台。</p>
-          </div>
-          <button id="closeXhsInstallModalBtn" class="icon-btn" type="button" aria-label="关闭">×</button>
-        </div>
-        <div class="install-command-grid">
-          <div class="install-command-card">
-            <div class="sub-heading compact">
-              <h4>macOS 一键命令</h4>
-              <button class="secondary-btn mini-btn" data-copy-command="mac" type="button">复制</button>
-            </div>
-            <textarea id="macInstallCommand" readonly></textarea>
-          </div>
-          <div class="install-command-card">
-            <div class="sub-heading compact">
-              <h4>Windows PowerShell 一键命令</h4>
-              <button class="secondary-btn mini-btn" data-copy-command="windows" type="button">复制</button>
-            </div>
-            <textarea id="windowsInstallCommand" readonly></textarea>
-          </div>
-        </div>
-        <div class="install-notes">
-          <strong>登录入口</strong>
-          <p>本地安装完成后，在终端运行 <code>xhs login --qrcode</code> 扫码登录；再运行 <code>xhs status --json</code> 测试登录状态。</p>
-          <p id="xhsInstallModalStatus">如果你已经下载了 .command 但双击提示没有权限，用上面的 macOS 命令会自动 chmod 赋权后运行。</p>
-        </div>
-      </div>
-    </div>
-
-    <script src="./app.js?v=20260831-2306"></script>
+    <script src="./app.js?v=20260831-2340"></script>
   </body>
 </html>
