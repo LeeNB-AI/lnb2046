@@ -160,6 +160,42 @@ function downloadXhsLocalHelper() {
   $("#hotspotTime").textContent = "安装助手运行成功后，可在本地工作台拉取热点";
 }
 
+function xhsHelperUrl(fileName) {
+  return `${window.location.origin.replace(/\/$/, "")}/${fileName}`;
+}
+
+function xhsInstallCommands() {
+  const macUrl = xhsHelperUrl("install-xhs-cli.command");
+  const winUrl = xhsHelperUrl("install-xhs-cli-windows.bat");
+  return {
+    mac: `cd ~/Downloads && curl -L "${macUrl}" -o install-xhs-cli.command && chmod +x install-xhs-cli.command && ./install-xhs-cli.command`,
+    windows: `cd $env:USERPROFILE\\Downloads; iwr "${winUrl}" -OutFile install-xhs-cli-windows.bat; .\\install-xhs-cli-windows.bat`,
+  };
+}
+
+function openXhsInstallModal() {
+  const commands = xhsInstallCommands();
+  $("#macInstallCommand").value = commands.mac;
+  $("#windowsInstallCommand").value = commands.windows;
+  $("#xhsInstallModalStatus").textContent =
+    "复制命令到终端运行后，会安装 uv、安装 xiaohongshu-cli、检测 xhs，并启动本地工作台。登录可在终端运行 xhs login --qrcode。";
+  $("#xhsInstallModal").classList.remove("hidden");
+  $("#xhsConfigStatus").textContent = "已打开本地安装与登录指引";
+  $("#xhsStatus").textContent = "请运行本地安装命令后登录";
+}
+
+async function copyXhsInstallCommand(type) {
+  const commands = xhsInstallCommands();
+  const value = commands[type];
+  if (!value) return;
+  try {
+    await navigator.clipboard.writeText(value);
+    $("#xhsInstallModalStatus").textContent = "已复制命令。请粘贴到终端运行。";
+  } catch {
+    $("#xhsInstallModalStatus").textContent = "复制失败，请手动选中文本复制。";
+  }
+}
+
 function apiSafeAssetPath(path) {
   if (!path || /^data:/i.test(path)) return "";
   return path;
@@ -312,7 +348,7 @@ function updateModelFieldVisibility() {
     field.classList.toggle("hidden", !field.dataset.coverField.split(/\s+/).includes(coverMode));
   });
   const installButton = $("#installXhsCliBtn");
-  if (installButton) installButton.textContent = isLocalWorkbench() ? "安装/检测 CLI" : "下载本地助手";
+  if (installButton) installButton.textContent = isLocalWorkbench() ? "安装/检测 CLI" : "安装 / 登录指引";
 }
 
 async function loadStatus() {
@@ -2059,7 +2095,7 @@ function bindEvents() {
   $("#installXhsCliBtn")?.addEventListener("click", async () => {
     const button = $("#installXhsCliBtn");
     if (!isLocalWorkbench()) {
-      downloadXhsLocalHelper();
+      openXhsInstallModal();
       return;
     }
     button.disabled = true;
@@ -2078,6 +2114,13 @@ function bindEvents() {
       button.disabled = false;
       button.textContent = "安装/检测 CLI";
     }
+  });
+  $("#closeXhsInstallModalBtn")?.addEventListener("click", () => $("#xhsInstallModal").classList.add("hidden"));
+  $("#xhsInstallModal")?.addEventListener("click", (event) => {
+    if (event.target.id === "xhsInstallModal") $("#xhsInstallModal").classList.add("hidden");
+  });
+  $all("[data-copy-command]").forEach((button) => {
+    button.addEventListener("click", () => copyXhsInstallCommand(button.dataset.copyCommand));
   });
 
   $("#generateBtn").addEventListener("click", () => generateFullFlow($("#generateBtn")));
