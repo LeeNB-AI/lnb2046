@@ -1485,6 +1485,22 @@ select:focus {
   line-height: 1.45;
 }
 
+.install-command-box {
+  width: 100%;
+  min-height: 92px;
+  margin-top: 10px;
+  padding: 10px 12px;
+  border: 1px dashed #d8cfc3;
+  border-radius: 8px;
+  background: #fffaf2;
+  color: #2a221b;
+  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", monospace;
+  font-size: 12px;
+  font-weight: 800;
+  line-height: 1.5;
+  resize: vertical;
+}
+
 .segmented {
   display: grid;
   grid-template-columns: repeat(3, minmax(0, 1fr));

@@ -22,6 +22,9 @@ const state = {
   coverAssetPath: "",
   productImageFolder: "",
   selectedCoverVariant: 0,
+  sopTaskType: "placement",
+  sopPlatform: "xiaohongshu",
+  sopLastOutput: "",
 };
 
 const $ = (selector) => document.querySelector(selector);
@@ -146,21 +149,32 @@ function showOnlineXhsCliHint(action = "操作") {
 
 function downloadXhsLocalHelper() {
   const isWindows = /win/i.test(navigator.platform || navigator.userAgent || "");
-  const fileName = isWindows ? "install-xhs-cli-windows.bat" : "install-xhs-cli.command";
-  const helperUrl = `${window.location.origin.replace(/\/$/, "")}/${fileName}`;
+  const origin = window.location.origin.replace(/\/$/, "");
+  const fileName = isWindows ? "install-xhs-cli-windows.bat" : "install-xhs-cli.sh";
+  const helperUrl = `${origin}/${fileName}`;
+  const macCommand = `curl -fsSL "${helperUrl}" | zsh`;
+  const runCommand = isWindows ? `cd $env:USERPROFILE\\Downloads; .\\${fileName}` : macCommand;
+  const commandBox = $("#xhsInstallCommand");
+  if (commandBox) {
+    commandBox.classList.remove("hidden");
+    commandBox.value = runCommand;
+  }
+  navigator.clipboard?.writeText(runCommand).catch(() => {});
+  if (!isWindows) {
+    $("#xhsConfigStatus").textContent =
+      "已复制 Mac 安装命令。请打开“终端”，粘贴后回车；它会自动安装/检测 CLI、测试登录、必要时显示二维码。这个方式不会再被 macOS 的 .command 权限拦截。";
+    $("#xhsStatus").textContent = "等待本地助手运行";
+    $("#hotspotTime").textContent = "助手运行后，可直接在右侧面板测试登录并拉取热点";
+    return;
+  }
   const link = document.createElement("a");
   link.href = helperUrl;
   link.download = fileName;
   document.body.appendChild(link);
   link.click();
   link.remove();
-  const runCommand = isWindows
-    ? `cd $env:USERPROFILE\\Downloads; .\\${fileName}`
-    : `cd ~/Downloads && chmod +x ${fileName} && ./${fileName}`;
-  navigator.clipboard?.writeText(runCommand).catch(() => {});
-  const message = isWindows
-    ? "已下载 Windows 本地助手，并尝试复制运行命令。运行后会自动安装/检测 CLI、测试登录、必要时弹出二维码。请保持 PowerShell 窗口打开，网页会连接它。建议使用不常用的小红书账号。"
-    : "已下载 macOS 本地助手，并尝试复制带 chmod 的运行命令。若双击提示无权限，请打开终端粘贴命令。运行后会自动安装/检测 CLI、测试登录、必要时弹出二维码。请保持终端窗口打开，网页会连接它。建议使用不常用的小红书账号。";
+  const message =
+    "已下载 Windows 本地助手，并尝试复制运行命令。运行后会自动安装/检测 CLI、测试登录、必要时弹出二维码。请保持 PowerShell 窗口打开，网页会连接它。建议使用不常用的小红书账号。";
   $("#xhsConfigStatus").textContent = message;
   $("#xhsStatus").textContent = "等待本地助手运行";
   $("#hotspotTime").textContent = "助手运行后，可直接在右侧面板测试登录并拉取热点";
@@ -304,6 +318,178 @@ function setProductInput(product) {
   $("#sellingPoints").value = product.sellingPoints || "";
   $("#targetAudience").value = product.targetAudience || "";
   $("#blockedTerms").value = product.blockedTerms || "";
+}
+
+function sopTaskLabel(taskType = state.sopTaskType) {
+  const labels = {
+    placement: "产品摆放图",
+    background: "实拍换背景",
+    "white-combo": "白底组合",
+    handheld: "人物拿产品",
+    "xhs-note": "小红书笔记",
+    cover: "封面图",
+    "content-image": "内容图",
+  };
+  return labels[taskType] || "产品摆放图";
+}
+
+function cleanOverlayText(text, fallback = "真的好用") {
+  return String(text || fallback)
+    .replace(/[，。！？!?,.;；：:“”"'（）()《》【】[\]、|｜~～]/g, " ")
+    .replace(/\s+/g, " ")
+    .trim()
+    .slice(0, 14);
+}
+
+function shortLinesFromSellingPoints(points) {
+  const items = splitList(points).slice(0, 4);
+  const fallback = ["顺手好用", "场景自然", "质感在线", "体验加分"];
+  return (items.length ? items : fallback).map((item) => cleanOverlayText(item, item).slice(0, 7));
+}
+
+function syncSopFromProductInput() {
+  const product = getProductInput();
+  $("#sopProductName").value = product.name || "";
+  $("#sopSearchKeywords").value = product.hotKeywords || "";
+  $("#sopSellingPoints").value = product.sellingPoints || "";
+  $("#sopTargetAudience").value = product.targetAudience || "";
+  $("#sopConstraints").value = product.blockedTerms || "";
+  $("#sopResultStatus").textContent = "已同步生成输入";
+}
+
+function getSopInput() {
+  return {
+    taskType: state.sopTaskType,
+    platform: state.sopPlatform,
+    productName: $("#sopProductName")?.value.trim() || $("#productName")?.value.trim() || "待命名商品",
+    sellingPoints: $("#sopSellingPoints")?.value.trim() || $("#sellingPoints")?.value.trim(),
+    targetAudience: $("#sopTargetAudience")?.value.trim() || $("#targetAudience")?.value.trim(),
+    searchKeywords: $("#sopSearchKeywords")?.value.trim() || $("#hotKeywords")?.value.trim(),
+    sourceMaterials: $("#sopSourceMaterials")?.value || "白底图和产品实拍",
+    sceneStyle: $("#sopSceneStyle")?.value.trim() || "生活化桌面场景，自然光，真实手机随手拍质感",
+    outputCount: Math.max(1, Math.min(5, Number($("#sopOutputCount")?.value || 3))),
+    constraints: $("#sopConstraints")?.value.trim() || $("#blockedTerms")?.value.trim(),
+  };
+}
+
+function platformName(platform) {
+  return platform === "douyin" ? "抖音" : "小红书";
+}
+
+function imagePromptForSop(input) {
+  const product = input.productName;
+  const points = splitList(input.sellingPoints).slice(0, 5).join("、") || "突出核心卖点和真实使用场景";
+  const overlays = shortLinesFromSellingPoints(input.sellingPoints);
+  const common = [
+    `商品：${product}`,
+    `卖点：${points}`,
+    `画幅：3:4 经典比例`,
+    `风格：${platformName(input.platform)}高清真实生活化商品图，自然光，高对比，手机实拍感，主体清晰`,
+    `产品要求：保持产品外观、包装、比例、颜色和文字不变，不改变品牌信息，不生成错误文字`,
+    `压字要求：文案放在上三分之一或留白处，不遮挡产品；多句上下错开；白字黑细边或黄字黑边；去掉标点；不用汉仪相关商用字体`,
+    `约束：${input.constraints || "克制表达，不夸大功效，不低俗，不露骨"}`,
+  ].join("\n");
+  const taskPrompts = {
+    placement: `请生成 ${input.outputCount} 张高质量商品摆放图。\n${common}\n场景：${input.sceneStyle}\n构图：产品放大到画面中下部，2-3 个包装盒与若干单品有层次地摆放，可加入同色系生活道具，干净高级但像真实拍摄。\n封面压字候选：${overlays.join(" / ")}`,
+    background: `请基于上传的实拍产品图生成 ${input.outputCount} 张换背景图。\n${common}\n操作：抠出原产品主体并保持不变，只替换背景与摆放环境。\n新背景：${input.sceneStyle}\n质感：保留真实阴影、接触面、环境反光和轻微透视，不要像硬贴图。\n封面压字候选：${overlays.join(" / ")}`,
+    "white-combo": `请基于白底产品图组合生成 ${input.outputCount} 张商品场景图。\n${common}\n素材：${input.sourceMaterials}\n摆法：2-3 盒产品加多个单品，随机和规律摆法各占一部分，画面有前后层次。\n场景：${input.sceneStyle}\n排除：不要黑底，不要过度棚拍，不要改变产品形状。\n封面压字候选：${overlays.join(" / ")}`,
+    handheld: `请生成 ${input.outputCount} 张人物拿产品的真实生活化图片。\n${common}\n人物：成年人，日常自然状态，像 iPhone 随手拍，皮肤质感真实，构图允许轻微不完美。\n动作：人物把 ${product} 自然拿在手里，产品大小符合真实尺寸，靠近胸前或脸下方但不遮挡关键信息。\n场景：${input.sceneStyle}\n边界：不出现未成年人，不做露骨姿势，不突出身体部位。\n封面压字候选：${overlays.join(" / ")}`,
+    cover: `请生成 ${input.outputCount} 张 ${platformName(input.platform)} 封面图。\n${common}\n主画面：产品放大 50%，位于中下部或右下部，背景改为 ${input.sceneStyle}。\n封面文字：主标题「${cleanOverlayText(overlays[0], product).slice(0, 6)}」，副标题「${cleanOverlayText(overlays[1], "打开体验").slice(0, 6)}」。\n检查：中文无错字、无多字漏字、字不压产品，远看一眼能读懂。`,
+    "content-image": `请生成 ${input.outputCount} 张与封面同场景的内容图。\n${common}\n主画面：延续 ${input.sceneStyle}，产品主体不变，画面留出贴纸空间。\n内容结构：每张图 1 个小标题加 3 个价值贴纸；小标题 7 字内，贴纸 7 字左右。\n贴纸候选：${overlays.map((line) => `✅ ${line}`).join(" / ")} / ❌ 别再将就\n检查：所有标点去掉，贴纸分散在空白区域，不遮挡产品。`,
+  };
+  return taskPrompts[input.taskType] || taskPrompts.placement;
+}
+
+function xhsCopyForSop(input) {
+  const product = input.productName;
+  const points = shortLinesFromSellingPoints(input.sellingPoints);
+  const audience = input.targetAudience || "重视生活品质、想找到省心选择的人群";
+  const titleBase = cleanOverlayText(points[0], product);
+  const tags = splitList(`${input.searchKeywords}\n${product}\n${points.join("、")}`)
+    .slice(0, 8)
+    .map((tag) => `#${tag.replace(/^#/, "")}`)
+    .join(" ");
+  return [
+    `标题方向`,
+    `1. ${titleBase}真的省心`,
+    `2. ${product}我会回购`,
+    `3. ${cleanOverlayText(points[1], "日常刚需")}这点很戳`,
+    ``,
+    `封面文案`,
+    `主：${cleanOverlayText(points[0], "这个很懂").slice(0, 6)}`,
+    `备：${cleanOverlayText(points[1], "舒服省心").slice(0, 6)}`,
+    ``,
+    `内容图文案`,
+    `图1 小标题：痛点说清楚｜❌ 别再将就｜❌ 选择太难｜✅ 看这几点`,
+    `图2 小标题：卖点看得见｜✅ ${points[0] || "体验加分"}｜✅ ${points[1] || "质感在线"}｜✅ ${points[2] || "日常好用"}`,
+    `图3 小标题：适合这样用｜✅ ${cleanOverlayText(input.sceneStyle, "日常场景").slice(0, 7)}｜✅ 新手友好｜✅ 点商品看`,
+    ``,
+    `正文`,
+    `最近在看 ${product}，我最在意的不是参数堆满，而是日常用起来是不是真的顺手。${points.slice(0, 3).join("、")} 这几个点比较打动我，放在 ${input.sceneStyle} 这种场景里也很自然。`,
+    `${audience} 可以重点看这款的使用感和场景适配度。想省时间的话，先从核心卖点和评价反馈判断，再决定要不要入手。`,
+    ``,
+    `标签`,
+    tags || `#${product} #好物分享 #小红书种草`,
+  ].join("\n");
+}
+
+function productionStepsForSop(input) {
+  const shared = [
+    `1. 准备 ${input.sourceMaterials}，优先选择包装清晰、角度完整、无强反光的素材。`,
+    `2. 生图时固定 3:4 比例，先保证产品不变，再调整背景、道具、光线和构图。`,
+    `3. 压字放在上三分之一或留白处，中文短句先去标点，再检查错字和遮挡。`,
+    `4. 每次生成 ${input.outputCount} 张，保留最像真实拍摄的一张继续做同场景扩展。`,
+  ];
+  if (input.taskType === "xhs-note") {
+    return [
+      `1. 用搜索词收集 10-20 篇同类笔记，提取标题句式、痛点表达、封面压字和评论高频词。`,
+      `2. 把商品 brief 填完整：卖点、目标人群、痛点、期待成为、特殊禁用表达。`,
+      `3. 先生成 3 个标题方向和 3 组封面变量，再写 200 字内正文。`,
+      `4. 最后把封面图、内容图提示词拆开执行，保持同场景和同一套视觉语言。`,
+    ].join("\n");
+  }
+  return shared.join("\n");
+}
+
+function renderSopOutput(result) {
+  state.sopLastOutput = result;
+  const container = $("#sopResult");
+  if (!container) return;
+  container.className = "sop-output";
+  container.innerHTML = result
+    .split(/\n{2,}/)
+    .map((block) => {
+      const [firstLine, ...rest] = block.split("\n");
+      const body = rest.join("\n");
+      if (!body) return `<pre>${escapeHtml(firstLine)}</pre>`;
+      return `<section class="sop-output-block"><h4>${escapeHtml(firstLine)}</h4><pre>${escapeHtml(body)}</pre></section>`;
+    })
+    .join("");
+}
+
+function generateSopWorkbench() {
+  const input = getSopInput();
+  const imagePrompt = imagePromptForSop(input);
+  const noteCopy = xhsCopyForSop(input);
+  const steps = productionStepsForSop(input);
+  const output = [
+    `可复制生图提示词`,
+    imagePrompt,
+    input.taskType === "xhs-note" ? `小红书笔记执行稿\n${noteCopy}` : `配套小红书文案\n${noteCopy}`,
+    `制作步骤\n${steps}`,
+  ].join("\n\n");
+  renderSopOutput(output);
+  $("#sopResultStatus").textContent = `${sopTaskLabel(input.taskType)} 已生成`;
+}
+
+async function copySopOutput() {
+  if (!state.sopLastOutput) generateSopWorkbench();
+  try {
+    await navigator.clipboard.writeText(state.sopLastOutput);
+    $("#sopResultStatus").textContent = "已复制全部 SOP";
+  } catch {
+    $("#sopResultStatus").textContent = "浏览器未允许复制，可手动选中右侧内容";
+  }
 }
 
 function getModelConfig() {
@@ -533,6 +719,7 @@ async function loadState() {
   renderDraftBox();
   renderHistory();
   renderSelectedNote();
+  syncSopFromProductInput();
 }
 
 function formatDateTime(value) {
@@ -2013,6 +2200,10 @@ function bindEvents() {
   bindSegmented("#knowledgeScope", "scope", (value) => (state.knowledgeScope = value));
   bindSegmented("#toneControl", "tone", (value) => (state.tone = value));
   bindSegmented("#hotspotUsageMode", "mode", (value) => (state.hotspotUsageMode = value));
+  bindSegmented("#sopPlatformControl", "platform", (value) => {
+    state.sopPlatform = value;
+    generateSopWorkbench();
+  });
   bindSegmented("#textModeControl", "mode", (value) => {
     state.textMode = value;
     updateModelFieldVisibility();
@@ -2027,6 +2218,18 @@ function bindEvents() {
   $("#fetchCoverModelsBtn").addEventListener("click", () => fetchModelList("cover", $("#fetchCoverModelsBtn")));
 
   $("#fetchHotspotsBtn").addEventListener("click", fetchHotspots);
+  $all("[data-sop-task]").forEach((button) => {
+    button.addEventListener("click", () => {
+      $all("[data-sop-task]").forEach((item) => item.classList.remove("selected"));
+      button.classList.add("selected");
+      state.sopTaskType = button.dataset.sopTask;
+      $("#sopResultStatus").textContent = `${sopTaskLabel()} 已选择`;
+      generateSopWorkbench();
+    });
+  });
+  $("#syncSopProductBtn")?.addEventListener("click", syncSopFromProductInput);
+  $("#generateSopBtn")?.addEventListener("click", generateSopWorkbench);
+  $("#copySopBtn")?.addEventListener("click", copySopOutput);
   $("#fetchHotspotsInlineBtn").addEventListener("click", fetchHotspots);
   $("#fetchXhsCliBtn").addEventListener("click", fetchXhsHotspots);
   $("#testXhsCliBtn").addEventListener("click", async () => {
