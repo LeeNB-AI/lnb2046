@@ -5,7 +5,7 @@
   "scripts": {
     "dev:web": "node server.js",
     "start:web": "node server.js",
-    "check": "node --check server.js && node --check app.js && node --check api/_cloud.js"
+    "check": "node --check server.js && node --check app.js && node --check api/_cloud.js && node --check xhs-local-helper.cjs"
   },
   "engines": {
     "node": ">=20"

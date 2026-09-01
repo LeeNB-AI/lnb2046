@@ -3,7 +3,7 @@ setlocal
 cd /d "%~dp0"
 
 echo XHS local helper
-echo This script installs uv if needed, installs xiaohongshu-cli, tests it, starts QR login when needed, then starts the local workbench.
+echo This script installs uv if needed, installs xiaohongshu-cli, tests it, starts QR login when needed, then starts the local helper for the online workbench.
 echo.
 echo Recommendation: use a Xiaohongshu account that is not your main daily account.
 echo.
@@ -38,17 +38,30 @@ if errorlevel 1 (
 
 where node >nul 2>nul
 if errorlevel 1 (
-  echo Node.js 20+ is required. Please install it from https://nodejs.org/
+  echo Node.js 20+ is required for the browser-to-CLI helper.
+  echo Please install it from https://nodejs.org/ and run this installer again.
   pause
   exit /b 1
 )
 
-if not exist node_modules (
-  npm install
+if "%XHS_WORKBENCH_HELPER_URL%"=="" (
+  set "HELPER_URL=https://temporary-spry-viola-wnmndj6.vercel.app/xhs-local-helper.cjs"
+) else (
+  set "HELPER_URL=%XHS_WORKBENCH_HELPER_URL%"
 )
+set "HELPER_DIR=%USERPROFILE%\.xhs-workbench"
+set "HELPER_FILE=%HELPER_DIR%\xhs-local-helper.cjs"
 
-echo Starting local workbench at http://127.0.0.1:4173/
-npm run start:web
+if not exist "%HELPER_DIR%" mkdir "%HELPER_DIR%"
+echo Downloading local helper...
+powershell -ExecutionPolicy Bypass -Command "Invoke-WebRequest -Uri '%HELPER_URL%' -OutFile '%HELPER_FILE%'"
+if errorlevel 1 goto failed
+
+echo.
+echo Starting local helper at http://127.0.0.1:4789/
+echo Keep this PowerShell window open while using the online workbench.
+echo.
+node "%HELPER_FILE%"
 pause
 exit /b 0
 
