@@ -4,7 +4,7 @@ set -e
 cd "$(dirname "$0")"
 
 echo "XHS local helper"
-echo "This script installs uv if needed, installs xiaohongshu-cli, tests it, starts QR login when needed, then starts the local workbench."
+echo "This script installs uv if needed, installs xiaohongshu-cli, tests it, starts QR login when needed, then starts the local helper for the online workbench."
 echo ""
 echo "Recommendation: use a Xiaohongshu account that is not your main daily account."
 echo ""
@@ -36,13 +36,22 @@ else
 fi
 
 if ! command -v node >/dev/null 2>&1; then
-  echo "Node.js is required. Please install Node.js 20+ from https://nodejs.org/"
+  echo "Node.js 20+ is required for the browser-to-CLI helper."
+  echo "Please install Node.js from https://nodejs.org/ and run this installer again."
   exit 1
 fi
 
-if [ ! -d "node_modules" ]; then
-  npm install
-fi
+HELPER_URL="${XHS_WORKBENCH_HELPER_URL:-https://temporary-spry-viola-wnmndj6.vercel.app/xhs-local-helper.cjs}"
+HELPER_DIR="$HOME/.xhs-workbench"
+HELPER_FILE="$HELPER_DIR/xhs-local-helper.cjs"
 
-echo "Starting local workbench at http://127.0.0.1:4173/"
-npm run start:web
+mkdir -p "$HELPER_DIR"
+echo "Downloading local helper..."
+curl -L "$HELPER_URL" -o "$HELPER_FILE"
+chmod +x "$HELPER_FILE"
+
+echo ""
+echo "Starting local helper at http://127.0.0.1:4789/"
+echo "Keep this Terminal window open while using the online workbench."
+echo ""
+node "$HELPER_FILE"

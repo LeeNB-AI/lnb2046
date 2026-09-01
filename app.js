@@ -29,6 +29,7 @@ const $all = (selector) => Array.from(document.querySelectorAll(selector));
 const API_BASE_KEY = "xhsWorkbenchApiBaseUrl";
 const TEXT_API_KEY_STORAGE = "xhsWorkbenchTextApiKey";
 const COVER_API_KEY_STORAGE = "xhsWorkbenchCoverApiKey";
+const XHS_LOCAL_HELPER_BASE = "http://127.0.0.1:4789";
 const CODEX_IMAGEGEN_PATH = "/Users/libucuo/.codex/skills/.system/imagegen/scripts/image_gen.py";
 const CODEX_IMAGEGEN_PYTHON = "/Users/libucuo/WorkBuddy/2026-08-06-20-04-17/image-workflow/venv/bin/python";
 
@@ -131,14 +132,14 @@ function isLocalWorkbench() {
 }
 
 function onlineXhsCliMessage(action = "操作") {
-  return `线上版不能直接${action}你电脑里的小红书 CLI。请在本地工作台运行 CLI 后，把导出的 JSON/TXT 粘贴到第 2 步“选题素材导入”。`;
+  return `线上工作台需要先连接本地助手，才能${action}你电脑里的小红书 CLI。第一次请点“下载本地助手”并运行，扫码登录后就能在这个面板里拉取热点。`;
 }
 
 function showOnlineXhsCliHint(action = "操作") {
   const message = onlineXhsCliMessage(action);
   $("#xhsConfigStatus").textContent = message;
-  $("#xhsStatus").textContent = "线上版请使用热点粘贴导入";
-  $("#hotspotTime").textContent = "线上版请粘贴本地 CLI 导出的热点素材";
+  $("#xhsStatus").textContent = "未连接本地助手";
+  $("#hotspotTime").textContent = "请先运行本地助手，再从右侧面板拉取热点";
   setDot($("#xhsDot"), false);
   return message;
 }
@@ -158,11 +159,87 @@ function downloadXhsLocalHelper() {
     : `cd ~/Downloads && chmod +x ${fileName} && ./${fileName}`;
   navigator.clipboard?.writeText(runCommand).catch(() => {});
   const message = isWindows
-    ? "已下载 Windows 本地助手，并尝试复制运行命令。双击或在 PowerShell 粘贴命令即可自动安装、测试并扫码登录。建议使用不常用的小红书账号。"
-    : "已下载 macOS 本地助手，并尝试复制带 chmod 的运行命令。若双击提示无权限，请打开终端粘贴命令。它会自动安装、测试并扫码登录。建议使用不常用的小红书账号。";
+    ? "已下载 Windows 本地助手，并尝试复制运行命令。运行后会自动安装/检测 CLI、测试登录、必要时弹出二维码。请保持 PowerShell 窗口打开，网页会连接它。建议使用不常用的小红书账号。"
+    : "已下载 macOS 本地助手，并尝试复制带 chmod 的运行命令。若双击提示无权限，请打开终端粘贴命令。运行后会自动安装/检测 CLI、测试登录、必要时弹出二维码。请保持终端窗口打开，网页会连接它。建议使用不常用的小红书账号。";
   $("#xhsConfigStatus").textContent = message;
-  $("#xhsStatus").textContent = "已提供本地安装助手";
-  $("#hotspotTime").textContent = "安装助手运行成功后，可在本地工作台拉取热点";
+  $("#xhsStatus").textContent = "等待本地助手运行";
+  $("#hotspotTime").textContent = "助手运行后，可直接在右侧面板测试登录并拉取热点";
+}
+
+async function localHelperApi(path, options = {}) {
+  const response = await fetch(`${XHS_LOCAL_HELPER_BASE}${path}`, {
+    headers: { "Content-Type": "application/json" },
+    ...options,
+  });
+  const rawText = await response.text();
+  let data = {};
+  try {
+    data = rawText ? JSON.parse(rawText) : {};
+  } catch {
+    throw new Error("本地助手返回内容无法识别，请重新运行本地助手。");
+  }
+  if (!response.ok || data.error) {
+    throw new Error(data.error || data.message || `本地助手请求失败：HTTP ${response.status}`);
+  }
+  return data;
+}
+
+function applyXhsHelperStatus(status) {
+  const xhs = status.xhs || status;
+  const available = Boolean(xhs.available);
+  const loggedIn = Boolean(xhs.loggedIn);
+  setDot($("#xhsDot"), available && loggedIn);
+  $("#xhsStatus").textContent = xhs.message || (available ? "小红书 CLI 已连接" : "未检测到小红书 CLI");
+  $("#xhsConfigStatus").textContent = xhs.message || "本地助手已连接";
+  if (xhs.xhsCliPath && $("#xhsCliPath")) $("#xhsCliPath").value = xhs.xhsCliPath;
+  return { available, loggedIn };
+}
+
+async function checkXhsLocalHelper() {
+  const status = await localHelperApi("/api/status");
+  applyXhsHelperStatus(status);
+  return status;
+}
+
+async function runXhsHelperInstallAndLogin(button) {
+  button.disabled = true;
+  button.textContent = "连接中...";
+  try {
+    let status;
+    try {
+      status = await checkXhsLocalHelper();
+    } catch {
+      downloadXhsLocalHelper();
+      return;
+    }
+    if (!status.xhs?.available) {
+      button.textContent = "安装中...";
+      $("#xhsConfigStatus").textContent = "本地助手已连接，正在安装/检测小红书 CLI...";
+      status = await localHelperApi("/api/xhs/install", {
+        method: "POST",
+        body: JSON.stringify({ xhsCliPath: $("#xhsCliPath")?.value.trim() || "" }),
+      });
+      applyXhsHelperStatus(status);
+    }
+    if (!status.xhs?.loggedIn) {
+      button.textContent = "等待扫码...";
+      $("#xhsConfigStatus").textContent = "二维码会显示在本地助手的终端窗口里。扫码完成后，网页会自动更新状态。建议使用不常用的小红书账号。";
+      status = await localHelperApi("/api/xhs/login", {
+        method: "POST",
+        body: JSON.stringify({ xhsCliPath: $("#xhsCliPath")?.value.trim() || "" }),
+      });
+      applyXhsHelperStatus(status);
+    }
+    button.textContent = "已连接";
+  } catch (error) {
+    $("#xhsConfigStatus").textContent = `连接失败：${error.message}`;
+    setDot($("#xhsDot"), false);
+  } finally {
+    window.setTimeout(() => {
+      button.disabled = false;
+      button.textContent = "测试连接与登录";
+    }, 900);
+  }
 }
 
 function apiSafeAssetPath(path) {
@@ -317,7 +394,7 @@ function updateModelFieldVisibility() {
     field.classList.toggle("hidden", !field.dataset.coverField.split(/\s+/).includes(coverMode));
   });
   const installButton = $("#installXhsCliBtn");
-  if (installButton) installButton.textContent = isLocalWorkbench() ? "安装/检测 CLI" : "下载本地助手";
+  if (installButton) installButton.textContent = isLocalWorkbench() ? "安装/检测 CLI" : "下载/连接本地助手";
 }
 
 async function loadStatus() {
@@ -337,6 +414,13 @@ async function loadStatus() {
     $("#xhsConfigStatus").textContent = status.xhs.message || "线上版请粘贴导入热点";
     $("#textConfigStatus").textContent = localTextKey ? "浏览器已保存文案 Key，可生成" : status.textgen.message;
     $("#coverConfigStatus").textContent = localCoverKey ? "浏览器已保存封面 Key，可生成" : status.imagegen.message;
+    if (!isLocalWorkbench()) {
+      try {
+        await checkXhsLocalHelper();
+      } catch {
+        showOnlineXhsCliHint("测试和拉取");
+      }
+    }
   } catch (error) {
     $("#xhsStatus").textContent = `状态检查失败：${error.message}`;
     $("#textStatus").textContent = "状态检查失败";
@@ -1533,22 +1617,33 @@ async function fetchHotspots() {
 
 async function fetchXhsHotspots() {
   const button = $("#fetchXhsCliBtn");
-  if (!isLocalWorkbench()) {
-    showOnlineXhsCliHint("拉取或登录");
-    return;
-  }
   button.disabled = true;
   button.textContent = "拉取中...";
-  $("#xhsConfigStatus").textContent = "正在调用本地 xhs CLI";
-  $("#hotspotTime").textContent = "正在调用本地 xhs CLI";
+  $("#xhsConfigStatus").textContent = "正在调用小红书 CLI";
+  $("#hotspotTime").textContent = "正在调用小红书 CLI";
   try {
     await saveScopedConfig("xhs");
-    state.hotspots = await api("/api/xhs/hotspots", {
-      method: "POST",
-      body: JSON.stringify({ product: getProductInput() }),
-    });
+    const product = getProductInput();
+    if (isLocalWorkbench()) {
+      state.hotspots = await api("/api/xhs/hotspots", {
+        method: "POST",
+        body: JSON.stringify({ product }),
+      });
+    } else {
+      const localResult = await localHelperApi("/api/xhs/hotspots", {
+        method: "POST",
+        body: JSON.stringify({ product, xhsCliPath: $("#xhsCliPath")?.value.trim() || "" }),
+      });
+      const rawText = localResult.rawText || localResult.stdout || JSON.stringify(localResult.hotspots || localResult);
+      state.hotspots = await api("/api/hotspots/import", {
+        method: "POST",
+        body: JSON.stringify({ rawText, product }),
+      });
+      applyXhsHelperStatus(localResult.status || { xhs: { available: true, loggedIn: true, message: "本地助手已拉取热点" } });
+    }
     renderHotspots();
-    $("#xhsConfigStatus").textContent = "已通过本地 xhs CLI 拉取热点";
+    $("#xhsConfigStatus").textContent = "已通过小红书 CLI 拉取并导入热点";
+    $("#hotspotTime").textContent = "已通过小红书 CLI 拉取并导入热点";
   } catch (error) {
     $("#xhsConfigStatus").textContent = `拉取失败：${error.message}`;
     $("#hotspotTime").textContent = `拉取失败：${error.message}`;
@@ -1937,7 +2032,7 @@ function bindEvents() {
   $("#testXhsCliBtn").addEventListener("click", async () => {
     const button = $("#testXhsCliBtn");
     if (!isLocalWorkbench()) {
-      showOnlineXhsCliHint("测试");
+      await runXhsHelperInstallAndLogin(button);
       return;
     }
     button.disabled = true;
@@ -2064,7 +2159,15 @@ function bindEvents() {
   $("#installXhsCliBtn")?.addEventListener("click", async () => {
     const button = $("#installXhsCliBtn");
     if (!isLocalWorkbench()) {
-      downloadXhsLocalHelper();
+      try {
+        const status = await checkXhsLocalHelper();
+        if (status.xhs?.available) {
+          $("#xhsConfigStatus").textContent = "本地助手已连接。可以点“测试连接与登录”，需要登录时会在终端显示二维码。";
+          return;
+        }
+      } catch {
+        downloadXhsLocalHelper();
+      }
       return;
     }
     button.disabled = true;
