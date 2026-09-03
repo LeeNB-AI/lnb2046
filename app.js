@@ -132,7 +132,7 @@ function isLocalWorkbench() {
 }
 
 function onlineXhsCliMessage(action = "操作") {
-  return `线上工作台需要先连接本地助手，才能${action}你电脑里的小红书 CLI。第一次请点“下载本地助手”并运行，扫码登录后就能在这个面板里拉取热点。`;
+  return `线上工作台需要先连接本地助手，才能${action}你电脑里的小红书 CLI。Mac 请先复制安装命令，到“终端”粘贴回车；扫码登录后就能在这个面板里拉取热点。`;
 }
 
 function showOnlineXhsCliHint(action = "操作") {
@@ -159,7 +159,7 @@ function downloadXhsLocalHelper() {
   navigator.clipboard?.writeText(runCommand).catch(() => {});
   if (!isWindows) {
     $("#xhsConfigStatus").textContent =
-      "已复制 Mac 安装命令。请打开“终端”，粘贴后回车；它会自动安装/检测 CLI、测试登录、必要时显示二维码。这个方式不会再被 macOS 的 .command 权限拦截。";
+      "已复制 Mac 安装命令。下一步：打开“终端”，粘贴后回车；看到二维码就扫码。终端窗口保持打开，网页才能连接本地 CLI。";
     $("#xhsStatus").textContent = "等待本地助手运行";
     $("#hotspotTime").textContent = "助手运行后，可直接在右侧面板测试登录并拉取热点";
     return;
@@ -396,6 +396,7 @@ function setModelSelectOptions(type, models = defaultModelOptions[type]) {
 }
 
 function updateModelFieldVisibility() {
+  const isWindows = /win/i.test(navigator.platform || navigator.userAgent || "");
   const textMode = state.textMode === "local-cli" ? "local" : "cloud";
   const coverMode = state.coverMode === "local-cli" ? "local" : "cloud";
   $all("[data-text-field]").forEach((field) => {
@@ -405,7 +406,9 @@ function updateModelFieldVisibility() {
     field.classList.toggle("hidden", !field.dataset.coverField.split(/\s+/).includes(coverMode));
   });
   const installButton = $("#installXhsCliBtn");
-  if (installButton) installButton.textContent = isLocalWorkbench() ? "安装/检测 CLI" : "下载/连接本地助手";
+  if (installButton) {
+    installButton.textContent = isLocalWorkbench() ? "安装/检测 CLI" : isWindows ? "下载 Windows 助手" : "复制安装命令";
+  }
 }
 
 async function loadStatus() {

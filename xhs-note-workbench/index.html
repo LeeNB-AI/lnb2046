@@ -19,13 +19,12 @@
 
         <nav class="nav">
           <button class="nav-item active" data-scroll-target="productSection"><span>1</span>生成输入</button>
-          <button class="nav-item" data-scroll-target="sopSection"><span>2</span>SOP工作台</button>
-          <button class="nav-item" data-scroll-target="hotspotSection"><span>3</span>选题库</button>
-          <button class="nav-item" data-scroll-target="knowledgeSection"><span>4</span>知识库</button>
-          <button class="nav-item" data-scroll-target="topicSection"><span>5</span>生成选题</button>
-          <button class="nav-item" data-scroll-target="copySection"><span>6</span>生成文案</button>
-          <button class="nav-item" data-scroll-target="coverSection"><span>7</span>生成封面</button>
-          <button class="nav-item" data-scroll-target="previewSection"><span>8</span>预览草稿</button>
+          <button class="nav-item" data-scroll-target="hotspotSection"><span>2</span>选题库</button>
+          <button class="nav-item" data-scroll-target="knowledgeSection"><span>3</span>知识库</button>
+          <button class="nav-item" data-scroll-target="topicSection"><span>4</span>生成选题</button>
+          <button class="nav-item" data-scroll-target="copySection"><span>5</span>生成文案</button>
+          <button class="nav-item" data-scroll-target="coverSection"><span>6</span>生成封面</button>
+          <button class="nav-item" data-scroll-target="previewSection"><span>7</span>预览草稿</button>
         </nav>
 
         <div class="system-card">
@@ -116,91 +115,10 @@
           </div>
         </section>
 
-        <section class="panel section-panel sop-panel" id="sopSection">
-          <div class="panel-heading">
-            <div class="step-heading-text">
-              <span class="step-badge">2</span>
-              <div>
-                <h3>AI作品 SOP 提示词工作台</h3>
-                <p>按商品资料生成封面、内容图和小红书笔记执行稿。</p>
-              </div>
-            </div>
-            <div class="step-actions-inline">
-              <button id="syncSopProductBtn" class="secondary-btn step-action" type="button">同步商品输入</button>
-              <button id="generateSopBtn" class="primary-btn step-action" type="button">生成 SOP</button>
-            </div>
-          </div>
-          <div class="sop-workbench">
-            <div class="sop-task-list" aria-label="SOP 任务类型">
-              <button class="sop-task selected" data-sop-task="placement" type="button">产品摆放图</button>
-              <button class="sop-task" data-sop-task="background" type="button">换背景</button>
-              <button class="sop-task" data-sop-task="white-combo" type="button">白底组合</button>
-              <button class="sop-task" data-sop-task="handheld" type="button">人物拿产品</button>
-              <button class="sop-task" data-sop-task="xhs-note" type="button">小红书笔记</button>
-              <button class="sop-task" data-sop-task="cover" type="button">封面图</button>
-              <button class="sop-task" data-sop-task="content-image" type="button">内容图</button>
-            </div>
-            <div class="sop-inputs">
-              <div class="segmented sop-platform" id="sopPlatformControl">
-                <button class="selected" data-platform="xiaohongshu" type="button">小红书</button>
-                <button data-platform="douyin" type="button">抖音</button>
-              </div>
-              <div class="form-grid">
-                <label>
-                  商品名
-                  <input id="sopProductName" placeholder="例如：牛油果护手霜" />
-                </label>
-                <label>
-                  搜索词
-                  <input id="sopSearchKeywords" placeholder="例如：秋冬护手霜, 通勤包必备" />
-                </label>
-              </div>
-              <label>
-                核心卖点
-                <textarea id="sopSellingPoints" placeholder="3-5 个卖点，支持换行"></textarea>
-              </label>
-              <label>
-                目标人群
-                <textarea id="sopTargetAudience" placeholder="年龄、性别、痛点、期待成为"></textarea>
-              </label>
-              <div class="form-grid">
-                <label>
-                  素材类型
-                  <select id="sopSourceMaterials">
-                    <option value="白底图和产品实拍">白底图和产品实拍</option>
-                    <option value="多角度产品图">多角度产品图</option>
-                    <option value="实拍图">实拍图</option>
-                    <option value="参考图和产品图">参考图和产品图</option>
-                  </select>
-                </label>
-                <label>
-                  生成数量
-                  <input id="sopOutputCount" type="number" min="1" max="5" value="3" />
-                </label>
-              </div>
-              <label>
-                场景偏好
-                <input id="sopSceneStyle" placeholder="例如：生活化浴室台面、通勤包内、奶油色卧室晨光" />
-              </label>
-              <label>
-                特殊要求
-                <textarea id="sopConstraints" placeholder="例如：不露骨、不夸大功效、产品包装文字清晰、中文压字不超过 6 字"></textarea>
-              </label>
-            </div>
-            <div class="sop-results">
-              <div class="sop-result-toolbar">
-                <span id="sopResultStatus">等待生成</span>
-                <button id="copySopBtn" class="secondary-btn mini-btn" type="button">复制全部</button>
-              </div>
-              <div id="sopResult" class="sop-output empty">选择任务并填写商品资料，点击“生成 SOP”。</div>
-            </div>
-          </div>
-        </section>
-
         <section class="panel section-panel" id="hotspotSection">
           <div class="panel-heading">
             <div class="step-heading-text">
-              <span class="step-badge">3</span>
+              <span class="step-badge">2</span>
               <div>
                 <h3>选题素材库</h3>
                 <p id="hotspotTime">等待读取</p>
@@ -227,7 +145,7 @@
         <section class="panel section-panel" id="knowledgeSection">
           <div class="panel-heading">
             <div class="step-heading-text">
-              <span class="step-badge">4</span>
+              <span class="step-badge">3</span>
               <div>
                 <h3>本地知识库的内容</h3>
                 <p>维护商品档案、词库和模板，生成时可选择启用范围。</p>
@@ -302,7 +220,7 @@
         <section class="panel section-panel" id="topicSection">
           <div class="panel-heading">
             <div class="step-heading-text">
-              <span class="step-badge">5</span>
+              <span class="step-badge">4</span>
               <div>
                 <h3>生成的选题</h3>
                 <p id="qualityScore">未生成</p>
@@ -334,7 +252,7 @@
         <section class="panel section-panel" id="copySection">
           <div class="panel-heading">
             <div class="step-heading-text">
-              <span class="step-badge">6</span>
+              <span class="step-badge">5</span>
               <div>
                 <h3>生成的文案</h3>
                 <p id="selectedAngle">未选择</p>
@@ -370,7 +288,7 @@
         <section class="panel section-panel" id="coverSection">
           <div class="panel-heading">
             <div class="step-heading-text">
-              <span class="step-badge">7</span>
+              <span class="step-badge">6</span>
               <div>
                 <h3>生成的封面</h3>
                 <p id="coverStatus">等待生成</p>
@@ -427,7 +345,7 @@
         <section class="panel section-panel" id="previewSection">
           <div class="panel-heading">
             <div class="step-heading-text">
-              <span class="step-badge">8</span>
+              <span class="step-badge">7</span>
               <div>
                 <h3>预览草稿</h3>
                 <p>按电脑端草稿审核视图检查封面、标题、正文、标签和评论。</p>
@@ -563,6 +481,10 @@
               <strong>小红书 CLI</strong>
               <span id="xhsConfigStatus">线上工作台可通过本地助手连接你电脑里的 CLI。</span>
             </div>
+            <div class="helper-steps">
+              <strong>Mac 使用方法</strong>
+              <p>点“复制安装命令”，打开“终端”粘贴后回车；看到二维码就扫码。终端窗口保持打开，网页就能测试登录和拉取热点。</p>
+            </div>
             <label>
               小红书 CLI 路径
               <input id="xhsCliPath" placeholder="例如：/Users/libucuo/.local/bin/xhs 或 xhs" />
@@ -578,17 +500,17 @@
               </select>
             </label>
             <div class="api-config-actions">
-              <button id="installXhsCliBtn" class="secondary-btn" type="button">下载/连接本地助手</button>
+              <button id="installXhsCliBtn" class="secondary-btn" type="button">复制安装命令</button>
               <button id="testXhsCliBtn" class="secondary-btn" type="button">测试连接与登录</button>
               <button id="fetchXhsCliBtn" class="secondary-btn" type="button">拉取热点</button>
               <button id="saveXhsConfigBtn" class="secondary-btn" type="button">保存 CLI 设置</button>
             </div>
             <textarea
               id="xhsInstallCommand"
-              class="install-command-box hidden"
+              class="install-command-box"
               readonly
               aria-label="Mac 本地助手安装命令"
-            ></textarea>
+            >curl -fsSL "https://temporary-spry-viola-wnmndj6.vercel.app/install-xhs-cli.sh" | zsh</textarea>
           </div>
 
           <div class="api-config-box model-config-card">
@@ -654,6 +576,6 @@
       </aside>
     </div>
 
-    <script src="./app.js?v=20260902-0018"></script>
+    <script src="./app.js?v=20260903-1045"></script>
   </body>
 </html>

@@ -481,6 +481,10 @@
               <strong>小红书 CLI</strong>
               <span id="xhsConfigStatus">线上工作台可通过本地助手连接你电脑里的 CLI。</span>
             </div>
+            <div class="helper-steps">
+              <strong>Mac 使用方法</strong>
+              <p>点“复制安装命令”，打开“终端”粘贴后回车；看到二维码就扫码。终端窗口保持打开，网页就能测试登录和拉取热点。</p>
+            </div>
             <label>
               小红书 CLI 路径
               <input id="xhsCliPath" placeholder="例如：/Users/libucuo/.local/bin/xhs 或 xhs" />
@@ -496,17 +500,17 @@
               </select>
             </label>
             <div class="api-config-actions">
-              <button id="installXhsCliBtn" class="secondary-btn" type="button">下载/连接本地助手</button>
+              <button id="installXhsCliBtn" class="secondary-btn" type="button">复制安装命令</button>
               <button id="testXhsCliBtn" class="secondary-btn" type="button">测试连接与登录</button>
               <button id="fetchXhsCliBtn" class="secondary-btn" type="button">拉取热点</button>
               <button id="saveXhsConfigBtn" class="secondary-btn" type="button">保存 CLI 设置</button>
             </div>
             <textarea
               id="xhsInstallCommand"
-              class="install-command-box hidden"
+              class="install-command-box"
               readonly
               aria-label="Mac 本地助手安装命令"
-            ></textarea>
+            >curl -fsSL "https://temporary-spry-viola-wnmndj6.vercel.app/install-xhs-cli.sh" | zsh</textarea>
           </div>
 
           <div class="api-config-box model-config-card">
@@ -572,6 +576,6 @@
       </aside>
     </div>
 
-    <script src="./app.js?v=20260902-0018"></script>
+    <script src="./app.js?v=20260903-1045"></script>
   </body>
 </html>
